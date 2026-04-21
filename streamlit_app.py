@@ -33,13 +33,27 @@ from backend import (
     noise_budget,
     snr_vs_magnitude,
     snr_vs_time,
-    ESO_FILTER_MAP,
-    ESO_REFERENCE_VALUES,
-    build_eso_payload,
-    compare_with_eso,
-    get_eso_reference,
-    parse_eso_result,
 )
+
+# ESO validation functions — requieren backend.py actualizado
+try:
+    from backend import (
+        ESO_FILTER_MAP,
+        ESO_REFERENCE_VALUES,
+        build_eso_payload,
+        compare_with_eso,
+        get_eso_reference,
+        parse_eso_result,
+    )
+    _ESO_AVAILABLE = True
+except ImportError:
+    _ESO_AVAILABLE = False
+    ESO_FILTER_MAP       = {}
+    ESO_REFERENCE_VALUES = {}
+    def build_eso_payload(*a, **kw): return {}
+    def compare_with_eso(*a, **kw): return {}
+    def get_eso_reference(*a, **kw): return None
+    def parse_eso_result(*a, **kw): return {}
 
 # ---------------------------------------------------------------------------
 # Configuración general
@@ -1059,6 +1073,14 @@ with tab_budget:
 # TAB 4 — VALIDACIÓN ESO
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_validation:
+    if not _ESO_AVAILABLE:
+        st.error(
+            "⚠️ **backend.py desactualizado.** "
+            "El archivo `backend.py` en el servidor no contiene las funciones ESO. "
+            "Sube el `backend.py` más reciente junto con `frontend.py` y vuelve a desplegar."
+        )
+    else:
+        pass  # continúa normalmente abajo
     st.markdown("## Validación contra ETC de ESO")
     st.markdown("""
 <div class="html-card">
