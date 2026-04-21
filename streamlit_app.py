@@ -1306,8 +1306,6 @@ with tab_model:
   <h3 style="margin-top:0;">Magnitud AB → señal [e⁻]</h3>
 </div>
 """, unsafe_allow_html=True)
-
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
         st.latex(r"""
 F_\nu = F_0^\mathrm{AB} \cdot 10^{-m_\mathrm{AB}/2.5}
 \quad [W\,m^{-2}\,Hz^{-1}]
