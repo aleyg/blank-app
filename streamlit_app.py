@@ -1,17 +1,18 @@
 """
-frontend.py — Exposure Time Calculator (ETC) — Streamlit Interface
-===================================================================
-Run with:
+frontend.py — Calculadora de Tiempo de Exposición (ETC) — Interfaz Streamlit
+=============================================================================
+Ejecutar con:
     streamlit run frontend.py
 
-This module is responsible exclusively for:
-  - Capturing user inputs (sidebar widgets)
-  - Calling backend functions
-  - Displaying results, plots and diagnostics
+Este módulo se encarga exclusivamente de:
+  - Capturar entradas del usuario
+  - Llamar funciones del backend
+  - Mostrar resultados, gráficas y diagnósticos
 
-No physics lives here. All science is imported from backend.py.
+Toda la física vive en backend.py.
 """
 
+import math
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -29,65 +30,72 @@ from backend import (
 )
 
 # ---------------------------------------------------------------------------
-# Page config
+# Configuración general
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Exposure Time Calculator",
+    page_title="Calculadora de Tiempo de Exposición",
     page_icon="🔭",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
-# Theme state
+# Estado del tema
 # ---------------------------------------------------------------------------
 if "theme_mode" not in st.session_state:
     st.session_state["theme_mode"] = "dark"
 
+
+def toggle_theme():
+    st.session_state["theme_mode"] = (
+        "light" if st.session_state["theme_mode"] == "dark" else "dark"
+    )
+
+
 theme = st.session_state["theme_mode"]
 
 # ---------------------------------------------------------------------------
-# Theme tokens
+# Paletas
 # ---------------------------------------------------------------------------
 THEMES = {
     "light": {
         "bg": "#f3f6fb",
-        "bg_soft": "#eef2f8",
+        "bg_soft": "#edf2f8",
         "surface": "#ffffff",
         "surface_2": "#f8fafc",
-        "sidebar": "#eef2f8",
-        "border": "#d8e0ea",
-        "border_strong": "#c4cfdb",
-        "text": "#17212b",
-        "text_muted": "#5f6c7b",
-        "text_soft": "#7b8794",
+        "sidebar": "#eef3f9",
+        "border": "#d9e1ec",
+        "border_strong": "#c7d2df",
+        "text": "#18212b",
+        "text_muted": "#607080",
+        "text_soft": "#7c8897",
         "accent": "#1d4ed8",
-        "accent_2": "#0f766e",
-        "accent_soft": "rgba(37, 99, 235, 0.10)",
-        "shadow": "0 12px 28px rgba(15, 23, 42, 0.08)",
-        "metric_bg": "#f8fafc",
-        "metric_border": "#dbe3ec",
+        "accent_alt": "#0f766e",
+        "accent_soft": "rgba(37,99,235,0.10)",
+        "shadow": "0 12px 28px rgba(15,23,42,0.08)",
         "topbar_bg": "rgba(255,255,255,0.78)",
-        "topbar_border": "rgba(203,213,225,0.8)",
+        "topbar_border": "rgba(203,213,225,0.95)",
+        "metric_bg": "#f8fafc",
+        "metric_border": "#dbe4ef",
         "plot_bg": "#ffffff",
         "plot_paper": "#ffffff",
         "plot_grid": "#e5e7eb",
         "plot_axis": "#1f2937",
         "plot_line": "#2563eb",
-        "plot_point": "#be123c",
+        "plot_point": "#be185d",
         "plot_target": "#d97706",
-        "sky_bg": "rgba(13, 148, 136, 0.10)",
+        "sky_bg": "rgba(13,148,136,0.10)",
         "sky_text": "#0f766e",
-        "sky_border": "rgba(13, 148, 136, 0.32)",
-        "read_bg": "rgba(79, 70, 229, 0.10)",
+        "sky_border": "rgba(13,148,136,0.34)",
+        "read_bg": "rgba(79,70,229,0.10)",
         "read_text": "#4338ca",
-        "read_border": "rgba(79, 70, 229, 0.32)",
-        "shot_bg": "rgba(22, 163, 74, 0.10)",
+        "read_border": "rgba(79,70,229,0.34)",
+        "shot_bg": "rgba(22,163,74,0.10)",
         "shot_text": "#15803d",
-        "shot_border": "rgba(22, 163, 74, 0.32)",
-        "dark_bg": "rgba(180, 83, 9, 0.10)",
+        "shot_border": "rgba(22,163,74,0.34)",
+        "dark_bg": "rgba(180,83,9,0.10)",
         "dark_text": "#b45309",
-        "dark_border": "rgba(180, 83, 9, 0.32)",
+        "dark_border": "rgba(180,83,9,0.34)",
     },
     "dark": {
         "bg": "#07101d",
@@ -95,19 +103,19 @@ THEMES = {
         "surface": "#0d1728",
         "surface_2": "#101c31",
         "sidebar": "#08111f",
-        "border": "#213149",
+        "border": "#22324a",
         "border_strong": "#334155",
         "text": "#e5e7eb",
-        "text_muted": "#b2bdca",
+        "text_muted": "#b3bfcb",
         "text_soft": "#7f8a99",
         "accent": "#60a5fa",
-        "accent_2": "#2dd4bf",
-        "accent_soft": "rgba(96, 165, 250, 0.12)",
-        "shadow": "0 16px 36px rgba(0, 0, 0, 0.28)",
+        "accent_alt": "#2dd4bf",
+        "accent_soft": "rgba(96,165,250,0.12)",
+        "shadow": "0 16px 36px rgba(0,0,0,0.30)",
+        "topbar_bg": "rgba(7,16,29,0.74)",
+        "topbar_border": "rgba(51,65,85,0.82)",
         "metric_bg": "#101c31",
         "metric_border": "#22324a",
-        "topbar_bg": "rgba(7,16,29,0.72)",
-        "topbar_border": "rgba(51,65,85,0.75)",
         "plot_bg": "#0d1728",
         "plot_paper": "#0d1728",
         "plot_grid": "#23344c",
@@ -115,28 +123,22 @@ THEMES = {
         "plot_line": "#60a5fa",
         "plot_point": "#f9a8d4",
         "plot_target": "#fbbf24",
-        "sky_bg": "rgba(34, 211, 238, 0.10)",
+        "sky_bg": "rgba(34,211,238,0.10)",
         "sky_text": "#67e8f9",
-        "sky_border": "rgba(34, 211, 238, 0.28)",
-        "read_bg": "rgba(165, 180, 252, 0.10)",
+        "sky_border": "rgba(34,211,238,0.28)",
+        "read_bg": "rgba(165,180,252,0.10)",
         "read_text": "#c7d2fe",
-        "read_border": "rgba(165, 180, 252, 0.28)",
-        "shot_bg": "rgba(134, 239, 172, 0.10)",
+        "read_border": "rgba(165,180,252,0.28)",
+        "shot_bg": "rgba(134,239,172,0.10)",
         "shot_text": "#86efac",
-        "shot_border": "rgba(134, 239, 172, 0.28)",
-        "dark_bg": "rgba(251, 191, 36, 0.10)",
+        "shot_border": "rgba(134,239,172,0.28)",
+        "dark_bg": "rgba(251,191,36,0.10)",
         "dark_text": "#fcd34d",
-        "dark_border": "rgba(251, 191, 36, 0.28)",
+        "dark_border": "rgba(251,191,36,0.28)",
     },
 }
 
 T = THEMES[theme]
-
-# ---------------------------------------------------------------------------
-# Theme toggle function
-# ---------------------------------------------------------------------------
-def toggle_theme():
-    st.session_state["theme_mode"] = "light" if st.session_state["theme_mode"] == "dark" else "dark"
 
 # ---------------------------------------------------------------------------
 # CSS
@@ -158,13 +160,13 @@ st.markdown(
   --text-muted: {T["text_muted"]};
   --text-soft: {T["text_soft"]};
   --accent: {T["accent"]};
-  --accent-2: {T["accent_2"]};
+  --accent-alt: {T["accent_alt"]};
   --accent-soft: {T["accent_soft"]};
-  --metric-bg: {T["metric_bg"]};
-  --metric-border: {T["metric_border"]};
+  --shadow: {T["shadow"]};
   --topbar-bg: {T["topbar_bg"]};
   --topbar-border: {T["topbar_border"]};
-  --shadow: {T["shadow"]};
+  --metric-bg: {T["metric_bg"]};
+  --metric-border: {T["metric_border"]};
 
   --sky-bg: {T["sky_bg"]};
   --sky-text: {T["sky_text"]};
@@ -193,7 +195,7 @@ body {{
 
 .stApp {{
   background:
-    radial-gradient(circle at top left, rgba(59,130,246,0.08), transparent 26%),
+    radial-gradient(circle at top left, rgba(59,130,246,0.08), transparent 25%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
   color: var(--text);
 }}
@@ -204,7 +206,7 @@ section[data-testid="stSidebar"] {{
 }}
 
 section[data-testid="stSidebar"] .block-container {{
-  padding-top: 1.2rem;
+  padding-top: 1.15rem;
 }}
 
 h1, h2, h3 {{
@@ -215,17 +217,18 @@ h1, h2, h3 {{
 
 h1 {{
   font-size: 2rem;
-  line-height: 1.05;
+  line-height: 1.04;
 }}
 
 h2 {{
   font-size: 1.3rem;
   line-height: 1.12;
+  margin-top: 0.2rem;
 }}
 
 h3 {{
-  font-size: 1.03rem;
-  line-height: 1.15;
+  font-size: 1.04rem;
+  line-height: 1.18;
 }}
 
 p, li, div, span, label {{
@@ -236,14 +239,14 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
   color: var(--text-muted) !important;
 }}
 
-div[data-testid="metric-container"] {{
+[data-testid="metric-container"] {{
   background: var(--metric-bg);
   border: 1px solid var(--metric-border);
   border-radius: 16px;
   padding: 14px 16px;
 }}
 
-div[data-testid="metric-container"] label {{
+[data-testid="metric-container"] label {{
   color: var(--text-soft) !important;
   font-size: 0.78rem !important;
   text-transform: uppercase;
@@ -269,27 +272,26 @@ div[data-testid="metric-container"] label {{
   font-weight: 700;
   letter-spacing: 0.10em;
   text-transform: uppercase;
-  margin-bottom: 0.18rem;
+  margin-bottom: 0.16rem;
 }}
 
 .topbar-title {{
   font-family: 'Source Serif 4', serif;
   color: var(--text);
-  font-size: 1.7rem;
+  font-size: 1.72rem;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.02;
 }}
 
 .topbar-subtitle {{
   color: var(--text-muted);
   font-size: 0.92rem;
-  margin-top: 0.20rem;
+  margin-top: 0.22rem;
 }}
 
-.hero-meta {{
+.meta-line {{
   color: var(--text-muted);
   font-size: 0.94rem;
-  margin-top: 0.25rem;
   margin-bottom: 1rem;
 }}
 
@@ -302,13 +304,12 @@ div[data-testid="metric-container"] label {{
   margin-bottom: 1rem;
 }}
 
-.card-section {{
+.plot-shell {{
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 1rem 1rem 0.85rem 1rem;
+  padding: 1rem 1rem 0.55rem 1rem;
   box-shadow: var(--shadow);
-  margin-bottom: 1rem;
 }}
 
 .section-kicker {{
@@ -382,7 +383,7 @@ div[data-testid="metric-container"] label {{
 
 .info-grid {{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   gap: 0.8rem 1rem;
   margin-top: 1rem;
   padding-top: 1rem;
@@ -392,7 +393,7 @@ div[data-testid="metric-container"] label {{
 .info-item {{
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.12rem;
 }}
 
 .info-item-label {{
@@ -408,18 +409,13 @@ div[data-testid="metric-container"] label {{
   font-weight: 600;
 }}
 
-.meta-line {{
-  color: var(--text-muted);
-  font-size: 0.93rem;
-  margin-bottom: 0.9rem;
-}}
-
-.eq-box {{
-  background: var(--surface-2);
+.html-card {{
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.85rem 0.85rem 0.35rem 0.85rem;
-  margin: 0.5rem 0 0.8rem 0;
+  border-radius: 18px;
+  padding: 1rem 1rem 0.9rem 1rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 1rem;
 }}
 
 .table-clean table {{
@@ -430,13 +426,28 @@ div[data-testid="metric-container"] label {{
 
 .table-clean th, .table-clean td {{
   text-align: left;
-  padding: 0.5rem 0.25rem;
+  padding: 0.48rem 0.25rem;
   border-bottom: 1px solid var(--border);
 }}
 
 .table-clean th {{
   color: var(--text-soft);
   font-weight: 600;
+}}
+
+.eq-wrap {{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.85rem 0.85rem 0.35rem 0.85rem;
+  margin-top: 0.65rem;
+}}
+
+.note-list {{
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.65;
+  margin-top: 0.75rem;
 }}
 
 button[kind="primary"] {{
@@ -448,17 +459,9 @@ button[kind="primary"] {{
   border-radius: 999px !important;
 }}
 
-.plot-wrapper {{
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 0.9rem 0.9rem 0.4rem 0.9rem;
-  box-shadow: var(--shadow);
-}}
-
 @media (max-width: 900px) {{
   .topbar-title {{
-    font-size: 1.4rem;
+    font-size: 1.42rem;
   }}
   .result-value {{
     font-size: 2.35rem;
@@ -473,108 +476,138 @@ button[kind="primary"] {{
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## 🔭 Configuration")
-    st.caption("Optical / Near-IR · ESO-inspired model")
+    st.markdown("## 🔭 Configuración")
+    st.caption("Óptico / Infrarrojo cercano · Modelo inspirado en ESO")
 
     st.markdown("---")
-    st.markdown("### Telescope")
+    st.markdown("### Telescopio")
     diam = st.number_input(
-        "Primary diameter (m)",
-        min_value=0.1, max_value=40.0, value=1.0, step=0.1,
-        help="Effective aperture of the primary mirror in meters.",
+        "Diámetro primario (m)",
+        min_value=0.1,
+        max_value=40.0,
+        value=1.0,
+        step=0.1,
+        help="Apertura efectiva del espejo primario en metros.",
     )
     obstruction = st.slider(
-        "Central obstruction (linear fraction)",
-        min_value=0.0, max_value=0.4, value=0.12, step=0.01,
-        help="Fraction of the primary diameter blocked by the secondary mirror.",
+        "Obstrucción central (fracción lineal)",
+        min_value=0.0,
+        max_value=0.4,
+        value=0.12,
+        step=0.01,
+        help="Fracción del diámetro primario bloqueada por el espejo secundario.",
     )
     throughput = st.slider(
-        "Total system throughput",
-        min_value=0.1, max_value=1.0, value=0.80, step=0.01,
-        help="Combined transmission of telescope optics, mirrors and filter.",
+        "Transmisión total del sistema",
+        min_value=0.1,
+        max_value=1.0,
+        value=0.80,
+        step=0.01,
+        help="Transmisión combinada de óptica, espejos y filtro.",
     )
 
     st.markdown("---")
-    st.markdown("### Filter & Mode")
-    mode = st.radio("Observing mode", ["Optical", "Near-IR"], horizontal=True)
+    st.markdown("### Filtro y modo")
+    mode = st.radio("Modo de observación", ["Optical", "Near-IR"], horizontal=True)
     filter_dict = OPTICAL_FILTERS if mode == "Optical" else NIR_FILTERS
-    filter_name = st.selectbox("Filter", list(filter_dict.keys()))
+    filter_name = st.selectbox("Filtro", list(filter_dict.keys()))
     filt = filter_dict[filter_name]
     det = detector_for_filter(filt)
 
     st.caption(
         f"λ_eff = {filt.lambda_eff_angstrom:.0f} Å · "
         f"Δλ = {filt.delta_lambda_angstrom:.0f} Å · "
-        f"Sky = {filt.sky_mag_arcsec2:.1f} mag/arcsec²"
+        f"Cielo = {filt.sky_mag_arcsec2:.1f} mag/arcsec²"
     )
 
     st.markdown("---")
-    st.markdown("### Source")
-    source_type = st.radio("Source type", ["Point source", "Extended"], horizontal=True)
-    src = "point" if source_type == "Point source" else "extended"
+    st.markdown("### Fuente")
+    source_type = st.radio(
+        "Tipo de fuente",
+        ["Fuente puntual", "Extendida"],
+        horizontal=True,
+    )
+    src = "point" if source_type == "Fuente puntual" else "extended"
 
     object_mag = st.number_input(
-        "Object magnitude (AB)",
-        min_value=0.0, max_value=35.0, value=20.0, step=0.1,
-        help="AB magnitude of the target in the selected filter.",
+        "Magnitud del objeto (AB)",
+        min_value=0.0,
+        max_value=35.0,
+        value=20.0,
+        step=0.1,
+        help="Magnitud AB del objeto en el filtro seleccionado.",
     )
 
     st.markdown("---")
-    st.markdown("### Observing Conditions")
+    st.markdown("### Condiciones de observación")
     seeing = st.slider(
         "Seeing FWHM (arcsec)",
-        min_value=0.3, max_value=3.0, value=1.0, step=0.05,
+        min_value=0.3,
+        max_value=3.0,
+        value=1.0,
+        step=0.05,
     )
     ap_radius = st.slider(
-        "Aperture radius (arcsec)",
-        min_value=0.3, max_value=5.0, value=1.5, step=0.1,
-        help="Radius of the circular photometric aperture.",
+        "Radio de apertura (arcsec)",
+        min_value=0.3,
+        max_value=5.0,
+        value=1.5,
+        step=0.1,
+        help="Radio de la apertura fotométrica circular.",
     )
     n_reads = st.number_input(
-        "Number of detector reads",
-        min_value=1, max_value=50, value=1,
-        help="For NIR up-the-ramp sampling, set > 1.",
+        "Número de lecturas del detector",
+        min_value=1,
+        max_value=50,
+        value=1,
+        help="Para muestreo NIR up-the-ramp, usar > 1.",
     )
 
     st.markdown("---")
-    st.markdown("### Calculation Mode")
+    st.markdown("### Modo de cálculo")
     calc_mode = st.radio(
-        "Solve for …",
-        ["S/N given exposure time", "Exposure time given S/N"],
-        help="Choose whether you specify time or target S/N.",
+        "Resolver para …",
+        ["S/N dado el tiempo de exposición", "Tiempo de exposición dado el S/N"],
+        help="Elige si deseas fijar el tiempo o el S/N objetivo.",
     )
 
-    if calc_mode == "S/N given exposure time":
+    if calc_mode == "S/N dado el tiempo de exposición":
         exp_time = st.number_input(
-            "Exposure time (s)",
-            min_value=0.1, max_value=1e6, value=600.0, step=10.0,
+            "Tiempo de exposición (s)",
+            min_value=0.1,
+            max_value=1e6,
+            value=600.0,
+            step=10.0,
         )
         target_snr_input = None
     else:
         target_snr_input = st.number_input(
-            "Target S/N",
-            min_value=1.0, max_value=1000.0, value=10.0, step=1.0,
+            "S/N objetivo",
+            min_value=1.0,
+            max_value=1000.0,
+            value=10.0,
+            step=1.0,
         )
         exp_time = None
 
     st.markdown("---")
-    st.markdown("### Plot range")
+    st.markdown("### Rango de la gráfica")
     t_start_log = st.slider("t_min  log₁₀(s)", 0.0, 3.0, 0.5, 0.1)
     t_end_log = st.slider("t_max  log₁₀(s)", 1.0, 5.0, 3.6, 0.1)
 
 # ---------------------------------------------------------------------------
-# Top bar
+# Barra superior
 # ---------------------------------------------------------------------------
-top_left, top_spacer, top_right = st.columns([10, 1, 1.2])
+top_left, top_mid, top_right = st.columns([10, 0.4, 1.2])
 
 with top_left:
     st.markdown(
         """
 <div class="topbar">
-  <div class="kicker">Academic Observation Toolkit</div>
-  <div class="topbar-title">Exposure Time Calculator</div>
+  <div class="kicker">Herramienta académica de observación</div>
+  <div class="topbar-title">Calculadora de Tiempo de Exposición</div>
   <div class="topbar-subtitle">
-    Photometric ETC for optical and near-infrared observations with dynamic theming and publication-grade visual output.
+    Interfaz fotométrica para estimar tiempo de exposición o relación señal-ruido en observaciones ópticas y de infrarrojo cercano.
   </div>
 </div>
 """,
@@ -591,18 +624,20 @@ with top_right:
         use_container_width=True,
     )
 
+mode_label = "Óptico" if mode == "Optical" else "Infrarrojo cercano"
+
 st.markdown(
     f"""
 <div class="meta-line">
-<strong>{mode} mode</strong> · Filter <strong>{filter_name}</strong> ·
-Telescope <strong>{diam:.1f} m</strong> · Target <strong>{object_mag:.1f} AB mag</strong>
+<strong>Modo {mode_label}</strong> · Filtro <strong>{filter_name}</strong> ·
+Telescopio <strong>{diam:.1f} m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# Assemble parameter objects
+# Ensamblado de parámetros
 # ---------------------------------------------------------------------------
 telescope = TelescopeParams(diameter_m=diam, obstruction_fraction=obstruction)
 conditions = ObservingConditions(
@@ -613,10 +648,10 @@ conditions = ObservingConditions(
 )
 
 # ---------------------------------------------------------------------------
-# Run calculation
+# Cálculo principal
 # ---------------------------------------------------------------------------
 try:
-    if calc_mode == "S/N given exposure time":
+    if calc_mode == "S/N dado el tiempo de exposición":
         result: ETCResult = compute_snr(
             object_mag, exp_time, telescope, filt, det, conditions, src
         )
@@ -630,12 +665,31 @@ except ValueError as exc:
     result = None
 
 # ---------------------------------------------------------------------------
-# Layout
+# Utilidad para ticks logarítmicos menos amontonados
 # ---------------------------------------------------------------------------
-col_main, col_side = st.columns([3.2, 1.8], gap="large")
+def build_log_ticks(tmin, tmax):
+    exponents = range(int(math.floor(math.log10(tmin))), int(math.ceil(math.log10(tmax))) + 1)
+    ticks = []
+    labels = []
+    for e in exponents:
+        val = 10 ** e
+        if tmin <= val <= tmax:
+            ticks.append(val)
+            if val < 60:
+                labels.append(f"{int(val)} s")
+            elif val < 3600:
+                labels.append(f"{int(val/60)} min")
+            else:
+                labels.append(f"{int(val/3600)} h")
+    return ticks, labels
+
+# ---------------------------------------------------------------------------
+# Layout principal
+# ---------------------------------------------------------------------------
+col_main, col_side = st.columns([3.35, 1.75], gap="large")
 
 with col_main:
-    st.markdown("## Results")
+    st.markdown("## Resultados")
 
     if error_msg:
         st.error(f"⚠️ {error_msg}")
@@ -643,22 +697,22 @@ with col_main:
         regime_css = result.noise_regime.replace(" ", "-").replace("/", "-")
         regime_label = result.noise_regime
 
-        if calc_mode == "S/N given exposure time":
-            primary_label = "Signal-to-noise ratio"
+        if calc_mode == "S/N dado el tiempo de exposición":
+            primary_label = "Relación señal-ruido"
             primary_value = f"{result.snr:.2f}"
-            secondary = f"Exposure time: {format_time(result.exposure_time_s)}"
+            secondary = f"Tiempo de exposición: {format_time(result.exposure_time_s)}"
         else:
-            primary_label = "Required exposure time"
+            primary_label = "Tiempo de exposición requerido"
             primary_value = format_time(result.time_for_target_snr)
             secondary = (
-                f"Achieved S/N = {result.snr:.2f} "
-                f"(target: {result.target_snr:.1f})"
+                f"S/N alcanzado = {result.snr:.2f} "
+                f"(objetivo: {result.target_snr:.1f})"
             )
 
         st.markdown(
             f"""
 <div class="result-card">
-  <div class="section-kicker">Primary output</div>
+  <div class="section-kicker">Resultado principal</div>
   <div class="result-label">{primary_label}</div>
   <div class="result-value">{primary_value}</div>
   <div class="result-subtitle">{secondary}</div>
@@ -666,15 +720,15 @@ with col_main:
 
   <div class="info-grid">
     <div class="info-item">
-      <div class="info-item-label">Signal</div>
+      <div class="info-item-label">Señal</div>
       <div class="info-item-value">{result.signal_e:.1f} e⁻</div>
     </div>
     <div class="info-item">
-      <div class="info-item-label">Sky signal</div>
+      <div class="info-item-label">Señal de cielo</div>
       <div class="info-item-value">{result.sky_signal_e:.1f} e⁻</div>
     </div>
     <div class="info-item">
-      <div class="info-item-label">Dark current</div>
+      <div class="info-item-label">Corriente oscura</div>
       <div class="info-item-value">{result.dark_signal_e:.2f} e⁻</div>
     </div>
     <div class="info-item">
@@ -682,11 +736,11 @@ with col_main:
       <div class="info-item-value">{result.read_noise_total_e2:.1f} e⁻²</div>
     </div>
     <div class="info-item">
-      <div class="info-item-label">Aperture pixels</div>
+      <div class="info-item-label">Píxeles de apertura</div>
       <div class="info-item-value">{result.n_pixels:.1f}</div>
     </div>
     <div class="info-item">
-      <div class="info-item-label">Enclosed energy</div>
+      <div class="info-item-label">Energía encerrada</div>
       <div class="info-item-value">{result.enclosed_energy*100:.1f} %</div>
     </div>
   </div>
@@ -696,12 +750,12 @@ with col_main:
         )
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Collecting area", f"{telescope.collecting_area_m2:.3f} m²")
-        m2.metric("Quantum efficiency", f"{det.quantum_efficiency*100:.0f} %")
-        m3.metric("Read noise", f"{det.read_noise_e} e⁻/pix")
-        m4.metric("Dark current", f"{det.dark_current_e_s} e⁻/s/pix")
+        m1.metric("Área colectora", f"{telescope.collecting_area_m2:.3f} m²")
+        m2.metric("Eficiencia cuántica", f"{det.quantum_efficiency*100:.0f} %")
+        m3.metric("Ruido de lectura", f"{det.read_noise_e} e⁻/pix")
+        m4.metric("Corriente oscura", f"{det.dark_current_e_s} e⁻/s/pix")
 
-    st.markdown("## S/N as a function of exposure time")
+    st.markdown("## Relación S/N en función del tiempo de exposición")
 
     t_arr, snr_arr = snr_vs_time(
         object_mag,
@@ -714,6 +768,8 @@ with col_main:
         t_end=10 ** t_end_log,
     )
 
+    tickvals, ticktext = build_log_ticks(10 ** t_start_log, 10 ** t_end_log)
+
     fig = go.Figure()
 
     fig.add_trace(
@@ -721,7 +777,7 @@ with col_main:
             x=t_arr,
             y=snr_arr,
             mode="lines",
-            name="S/N curve",
+            name="Curva S/N",
             line=dict(color=T["plot_line"], width=3),
             hovertemplate="t = %{x:.2f} s<br>S/N = %{y:.2f}<extra></extra>",
         )
@@ -736,9 +792,16 @@ with col_main:
                 x=[t_op],
                 y=[snr_op],
                 mode="markers",
-                name="Operating point",
-                marker=dict(color=T["plot_point"], size=10, line=dict(width=1, color=T["plot_paper"])),
-                hovertemplate=f"Operating point<br>t = {t_op:.2f} s<br>S/N = {snr_op:.2f}<extra></extra>",
+                name="Punto de operación",
+                marker=dict(
+                    color=T["plot_point"],
+                    size=10,
+                    line=dict(width=1, color=T["plot_paper"]),
+                ),
+                hovertemplate=(
+                    f"Punto de operación<br>t = {t_op:.2f} s<br>"
+                    f"S/N = {snr_op:.2f}<extra></extra>"
+                ),
             )
         )
 
@@ -757,120 +820,140 @@ with col_main:
             opacity=0.85,
         )
 
-    if target_snr_input and calc_mode == "Exposure time given S/N":
+    if target_snr_input and calc_mode == "Tiempo de exposición dado el S/N":
         fig.add_hline(
             y=target_snr_input,
             line_width=1.1,
             line_dash="dot",
             line_color=T["plot_target"],
-            annotation_text=f"Target S/N = {target_snr_input:.0f}",
+            annotation_text=f"S/N objetivo = {target_snr_input:.0f}",
             annotation_position="top left",
         )
 
     fig.update_layout(
         template="plotly_dark" if theme == "dark" else "plotly_white",
-        height=430,
-        margin=dict(l=30, r=25, t=50, b=30),
+        height=520,
+        margin=dict(l=55, r=28, t=78, b=58),
         paper_bgcolor=T["plot_paper"],
         plot_bgcolor=T["plot_bg"],
-        font=dict(family="Inter, sans-serif", size=13, color=T["plot_axis"]),
+        font=dict(
+            family="Inter, sans-serif",
+            size=13,
+            color=T["plot_axis"],
+        ),
         title=dict(
-            text=f"{filt.name}-band · {object_mag:.1f} AB mag · D = {diam:.1f} m",
+            text=f"Filtro {filt.name} · {object_mag:.1f} AB mag · D = {diam:.1f} m",
             font=dict(size=15, color=T["plot_axis"]),
             x=0.02,
             xanchor="left",
+            y=0.97,
         ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=1.03,
             xanchor="left",
             x=0.0,
             bgcolor="rgba(0,0,0,0)",
+            font=dict(size=12),
         ),
     )
 
     fig.update_xaxes(
         type="log",
-        title="Exposure time (s)",
+        title="Tiempo de exposición",
+        tickmode="array",
+        tickvals=tickvals,
+        ticktext=ticktext,
         showgrid=True,
         gridcolor=T["plot_grid"],
         zeroline=False,
         linecolor=T["plot_grid"],
-        tickfont=dict(size=12),
+        tickfont=dict(size=11),
         title_font=dict(size=13),
     )
 
     fig.update_yaxes(
-        title="Signal-to-noise ratio",
+        title="Relación señal-ruido",
         showgrid=True,
         gridcolor=T["plot_grid"],
         zeroline=False,
         linecolor=T["plot_grid"],
-        tickfont=dict(size=12),
+        tickfont=dict(size=11),
         title_font=dict(size=13),
     )
 
-    st.markdown('<div class="plot-wrapper">', unsafe_allow_html=True)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"displayModeBar": False},
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with col_side:
-    st.markdown("## Technical details")
+    st.markdown("## Detalles técnicos")
 
-    with st.container():
-        st.markdown('<div class="card-section">', unsafe_allow_html=True)
-        st.markdown("### Detector Parameters")
-        st.markdown(
-            f"""
-<div class="table-clean">
-<table>
-<thead>
-<tr><th>Parameter</th><th>Value</th></tr>
-</thead>
-<tbody>
-<tr><td>Read noise</td><td>{det.read_noise_e} e⁻/pix</td></tr>
-<tr><td>Dark current</td><td>{det.dark_current_e_s} e⁻/s/pix</td></tr>
-<tr><td>Pixel scale</td><td>{det.pixel_scale_arcsec} arcsec/pix</td></tr>
-<tr><td>Quantum efficiency</td><td>{det.quantum_efficiency*100:.0f} %</td></tr>
-</tbody>
-</table>
+    detector_card = f"""
+<div class="html-card">
+  <div class="section-kicker">Instrumento</div>
+  <h3 style="margin-top:0;">Parámetros del detector</h3>
+  <div class="table-clean">
+    <table>
+      <thead>
+        <tr><th>Parámetro</th><th>Valor</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Ruido de lectura</td><td>{det.read_noise_e} e⁻/pix</td></tr>
+        <tr><td>Corriente oscura</td><td>{det.dark_current_e_s} e⁻/s/pix</td></tr>
+        <tr><td>Escala de píxel</td><td>{det.pixel_scale_arcsec} arcsec/pix</td></tr>
+        <tr><td>Eficiencia cuántica</td><td>{det.quantum_efficiency*100:.0f} %</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+"""
+    st.markdown(detector_card, unsafe_allow_html=True)
+
+    filter_card = f"""
+<div class="html-card">
+  <div class="section-kicker">Configuración espectral</div>
+  <h3 style="margin-top:0;">Parámetros del filtro</h3>
+  <div class="table-clean">
+    <table>
+      <thead>
+        <tr><th>Parámetro</th><th>Valor</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Banda</td><td>{filt.name}</td></tr>
+        <tr><td>λ_eff</td><td>{filt.lambda_eff_angstrom:.0f} Å</td></tr>
+        <tr><td>Δλ</td><td>{filt.delta_lambda_angstrom:.0f} Å</td></tr>
+        <tr><td>Brillo del cielo</td><td>{filt.sky_mag_arcsec2:.1f} mag/arcsec²</td></tr>
+        <tr><td>Modo</td><td>{filt.mode}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+"""
+    st.markdown(filter_card, unsafe_allow_html=True)
+
+    st.markdown(
+        """
+<div class="html-card">
+  <div class="section-kicker">Modelo teórico</div>
+  <h3 style="margin-top:0;">Modelo físico</h3>
+  <div class="note-list">
+    La relación señal-ruido se calcula a partir de la señal del objeto, el fondo de cielo,
+    la corriente oscura y la contribución del ruido de lectura integrada en la apertura fotométrica.
+  </div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        unsafe_allow_html=True,
+    )
 
-    with st.container():
-        st.markdown('<div class="card-section">', unsafe_allow_html=True)
-        st.markdown("### Filter Parameters")
-        st.markdown(
-            f"""
-<div class="table-clean">
-<table>
-<thead>
-<tr><th>Parameter</th><th>Value</th></tr>
-</thead>
-<tbody>
-<tr><td>Band</td><td>{filt.name}</td></tr>
-<tr><td>λ_eff</td><td>{filt.lambda_eff_angstrom:.0f} Å</td></tr>
-<tr><td>Δλ</td><td>{filt.delta_lambda_angstrom:.0f} Å</td></tr>
-<tr><td>Sky brightness</td><td>{filt.sky_mag_arcsec2:.1f} mag/arcsec²</td></tr>
-<tr><td>Mode</td><td>{filt.mode}</td></tr>
-</tbody>
-</table>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with st.container():
-        st.markdown('<div class="card-section">', unsafe_allow_html=True)
-        st.markdown("### Physical Model")
-        st.markdown('<div class="eq-box">', unsafe_allow_html=True)
-        st.latex(
-            r"""
+    st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+    st.latex(
+        r"""
 \frac{S}{N} =
 \frac{S}{
 \sqrt{
@@ -878,35 +961,41 @@ S + N_\mathrm{sky} + N_\mathrm{dark}
 + \sigma_\mathrm{RON}^{2}\, n_\mathrm{pix}\, n_\mathrm{reads}
 }}
 """
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown(
-            """
-**Terms**
-- **S** = object signal [e⁻]
-- **N_sky** = sky background [e⁻]
-- **N_dark** = dark current [e⁻]
-- **σ_RON² · n_pix · n_reads** = read-noise variance [e⁻²]
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-**Noise regimes**
-- 🔵 **Sky-limited** — sky dominates
-- 🟣 **Read-noise-limited** — short exposures or faint sky
-- 🟢 **Shot-noise-limited** — bright-source dominated
-- 🟠 **Dark-limited** — dark-current dominated
-"""
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+<div class="html-card">
+  <div class="section-kicker">Interpretación</div>
+  <h3 style="margin-top:0;">Términos y regímenes de ruido</h3>
+  <div class="note-list">
+    <strong>S</strong> = señal del objeto [e⁻]<br>
+    <strong>N_sky</strong> = contribución del cielo [e⁻]<br>
+    <strong>N_dark</strong> = corriente oscura [e⁻]<br>
+    <strong>σ_RON² · n_pix · n_reads</strong> = varianza por ruido de lectura [e⁻²]<br><br>
 
-    with st.container():
-        st.markdown('<div class="card-section">', unsafe_allow_html=True)
-        st.markdown("### Assumptions & Limitations")
-        st.caption(
-            """
-- Gaussian PSF; real PSFs may include broader wings
-- No atmospheric dispersion or extinction
-- Single-filter, single-epoch model
-- Fixed sky surface brightness
-- Flat detector response within the selected bandpass
+    🔵 <strong>Sky-limited</strong> — domina el fondo de cielo<br>
+    🟣 <strong>Read-noise-limited</strong> — dominan exposiciones cortas o cielo tenue<br>
+    🟢 <strong>Shot-noise-limited</strong> — domina la señal intrínseca de la fuente<br>
+    🟠 <strong>Dark-limited</strong> — domina la corriente oscura
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    assumptions_card = """
+<div class="html-card">
+  <div class="section-kicker">Alcance del modelo</div>
+  <h3 style="margin-top:0;">Supuestos y limitaciones</h3>
+  <div class="note-list">
+    - PSF gaussiana; PSFs reales pueden mostrar alas más extendidas<br>
+    - No se incluye dispersión atmosférica ni extinción<br>
+    - Modelo de una sola época y un solo filtro<br>
+    - Brillo de cielo fijo<br>
+    - Respuesta plana del detector dentro de la banda seleccionada
+  </div>
+</div>
 """
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(assumptions_card, unsafe_allow_html=True)
