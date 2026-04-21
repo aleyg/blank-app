@@ -1292,7 +1292,7 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"""
 \frac{S}{N} =
 \frac{S}{\sqrt{S + N_\mathrm{sky} + N_\mathrm{dark}
@@ -1306,6 +1306,8 @@ with tab_model:
   <h3 style="margin-top:0;">Magnitud AB → señal [e⁻]</h3>
 </div>
 """, unsafe_allow_html=True)
+
+        
         st.latex(r"""
 F_\nu = F_0^\mathrm{AB} \cdot 10^{-m_\mathrm{AB}/2.5}
 \quad [W\,m^{-2}\,Hz^{-1}]
@@ -1325,7 +1327,7 @@ S = \Phi \cdot A_\mathrm{eff} \cdot \eta_\mathrm{total} \cdot \mathrm{EE}(r_\mat
 """)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"""
 A_\mathrm{eff} = \pi\left[
 \left(\frac{D}{2}\right)^2
@@ -1343,7 +1345,7 @@ A_\mathrm{eff} = \pi\left[
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"""
 \mathrm{EE}(r_\mathrm{ap}) = 1 - \exp\!\left(
 -\frac{r_\mathrm{ap}^2}{2\sigma^2}\right)
@@ -1360,7 +1362,7 @@ A_\mathrm{eff} = \pi\left[
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"""
 \dot{N}_\mathrm{sky,pix} =
 \Phi(m_\mathrm{sky}) \cdot \Omega_\mathrm{pix} \cdot A_\mathrm{eff} \cdot \eta
