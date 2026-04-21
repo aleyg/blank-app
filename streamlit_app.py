@@ -553,7 +553,7 @@ with st.sidebar:
   <div style="font-family:'DM Serif Display',serif;font-size:1.45rem;
               color:var(--text);letter-spacing:-0.01em;">🔭 CTE Astronómica</div>
   <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">
-    AstroObs 2026 · Modelo ESO
+    AstroObs 2026 
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -959,7 +959,6 @@ with tab_curves:
         )
         fig_t.update_yaxes(title="Relación señal-ruido (S/N)", **AXIS_BASE)
 
-        st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
         st.plotly_chart(fig_t, use_container_width=True, config={"displayModeBar": False})
         st.markdown("</div>", unsafe_allow_html=True)
 
