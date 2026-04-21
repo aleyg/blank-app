@@ -1,95 +1,120 @@
 """
-backend.py — Exposure Time Calculator (ETC) — Scientific Core
-==============================================================
-All functions are pure (no side-effects, no I/O) and return plain Python
-objects so they can be called from any frontend (Streamlit, Flask, CLI …).
+backend.py — Calculadora de Tiempo de Exposición (CTE) — Núcleo Científico
+===========================================================================
+Todas las funciones son puras (sin efectos secundarios ni E/S) y devuelven
+objetos Python planos, por lo que pueden llamarse desde cualquier frontend
+(Streamlit, Flask, CLI …).
 
-Physical model
---------------
-S/N = S / sqrt(S + N_sky + N_dark + N_read²·n_pix)
+Modelo Físico
+-------------
+La relación señal-ruido (S/N) se define como:
 
-where
-  S        = object signal  [e⁻]
-  N_sky    = sky background signal  [e⁻]
-  N_dark   = dark-current signal  [e⁻]
-  N_read²  = read-noise variance per pixel  [e⁻²]
-  n_pix    = number of pixels in the aperture
+    S/N = S / sqrt(S + N_sky + N_dark + σ_RON² · n_pix · n_reads)
 
-References: ESO FORS ETC white-paper; Howell (2006) "Handbook of CCD Astronomy"
+donde:
+    S        = señal del objeto                          [e⁻]
+    N_sky    = señal del fondo de cielo                  [e⁻]
+    N_dark   = señal de corriente oscura                 [e⁻]
+    σ_RON²   = varianza del ruido de lectura por píxel  [e⁻²]
+    n_pix    = número de píxeles en la apertura
+    n_reads  = número de lecturas del detector
+
+Cadena de conversión:
+    mag_AB  →  F_ν [W/m²/Hz]  →  F_λ [W/m²/m]  →  flujo de banda [W/m²]
+            →  flujo de fotones [ph/s/m²]  →  señal del detector [e⁻]
+
+Referencias:
+    - ESO FORS ETC white-paper (https://etc.eso.org/fors)
+    - Howell (2006) "Handbook of CCD Astronomy", 2ª ed.
+    - Rieke (2003) "Detection of Light", Cambridge UP
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constantes físicas fundamentales
 # ---------------------------------------------------------------------------
-H_PLANCK = 6.626e-34   # J·s
-C_LIGHT  = 3.0e8       # m/s
-AB_F0    = 3.631e-23   # W/m²/Hz  (AB zero-point flux density)
+H_PLANCK: float = 6.62607015e-34   # J·s   (CODATA 2018)
+C_LIGHT: float  = 2.99792458e8     # m/s   (exacto)
+AB_F0: float    = 3.630780548e-23  # W/m²/Hz  (flujo cero AB, Oke & Gunn 1983)
 
 # ---------------------------------------------------------------------------
-# Data classes (parameter containers)
+# Data classes (contenedores de parámetros)
 # ---------------------------------------------------------------------------
 
 @dataclass
 class TelescopeParams:
-    """Primary mirror diameter and central obstruction."""
-    diameter_m: float          # primary mirror [m]
-    obstruction_fraction: float = 0.12   # linear fraction of diameter
+    """Parámetros del telescopio primario y obstrucción central."""
+    diameter_m: float                      # diámetro del espejo primario [m]
+    obstruction_fraction: float = 0.12    # fracción lineal del diámetro obstruida
 
     @property
     def collecting_area_m2(self) -> float:
-        """Effective collecting area [m²]."""
+        """Área efectiva de recolección [m²].
+
+        A = π · (r_outer² − r_inner²)
+        donde r_inner = obstruction_fraction · r_outer
+        """
         r_outer = self.diameter_m / 2.0
         r_inner = r_outer * self.obstruction_fraction
-        return math.pi * (r_outer**2 - r_inner**2)
+        return math.pi * (r_outer ** 2 - r_inner ** 2)
 
 
 @dataclass
 class FilterParams:
-    """Photometric band definition."""
+    """Definición de una banda fotométrica."""
     name: str
-    lambda_eff_angstrom: float   # effective wavelength [Å]
-    delta_lambda_angstrom: float # bandwidth [Å]
-    sky_mag_arcsec2: float       # sky surface brightness [AB mag/arcsec²]
+    lambda_eff_angstrom: float    # longitud de onda efectiva [Å]
+    delta_lambda_angstrom: float  # anchura de banda [Å]
+    sky_mag_arcsec2: float        # brillo superficial del cielo [AB mag/arcsec²]
     mode: Literal["optical", "nir"] = "optical"
 
     @property
     def lambda_eff_m(self) -> float:
+        """Longitud de onda efectiva en metros."""
         return self.lambda_eff_angstrom * 1e-10
 
     @property
     def delta_lambda_m(self) -> float:
+        """Anchura de banda en metros."""
         return self.delta_lambda_angstrom * 1e-10
+
+    @property
+    def lambda_eff_um(self) -> float:
+        """Longitud de onda efectiva en micrómetros (para etiquetas)."""
+        return self.lambda_eff_angstrom * 1e-4
 
 
 @dataclass
 class DetectorParams:
-    """CCD / IR-array detector characteristics."""
-    read_noise_e: float       # [e⁻/pix/read]
-    dark_current_e_s: float   # [e⁻/pix/s]
-    pixel_scale_arcsec: float # [arcsec/pix]
-    quantum_efficiency: float # dimensionless [0–1]
+    """Características del detector (CCD o array IR)."""
+    read_noise_e: float        # ruido de lectura  [e⁻/pix/lectura]
+    dark_current_e_s: float    # corriente oscura  [e⁻/pix/s]
+    pixel_scale_arcsec: float  # escala de placa   [arcsec/pix]
+    quantum_efficiency: float  # eficiencia cuántica (adimensional, 0–1)
 
 
 @dataclass
 class ObservingConditions:
-    """Atmospheric and observational parameters."""
-    seeing_fwhm_arcsec: float  # FWHM of the PSF [arcsec]
-    aperture_radius_arcsec: float  # photometric aperture radius [arcsec]
-    total_throughput: float = 0.80  # telescope + optics + filter transmission [0–1]
-    n_reads: int = 1  # number of detector reads (for up-the-ramp in NIR, etc.)
+    """Parámetros atmosféricos y de observación."""
+    seeing_fwhm_arcsec: float        # FWHM de la PSF  [arcsec]
+    aperture_radius_arcsec: float    # radio de apertura fotométrica [arcsec]
+    total_throughput: float = 0.80   # transmisión total telescopio + óptica + filtro [0–1]
+    n_reads: int = 1                 # número de lecturas (útil para NIR up-the-ramp)
+
+    @property
+    def aperture_diameter_arcsec(self) -> float:
+        return 2.0 * self.aperture_radius_arcsec
 
 
 # ---------------------------------------------------------------------------
-# Pre-defined instrument configurations
-# (easily extended by adding entries to these dicts)
+# Configuraciones instrumentales predefinidas
 # ---------------------------------------------------------------------------
 
 OPTICAL_DETECTOR = DetectorParams(
@@ -107,129 +132,244 @@ NIR_DETECTOR = DetectorParams(
 )
 
 OPTICAL_FILTERS: dict[str, FilterParams] = {
-    "g": FilterParams("g", 4800, 1400, 22.0, "optical"),
-    "r": FilterParams("r", 6200, 1300, 20.8, "optical"),
-    "i": FilterParams("i", 7600, 1500, 19.5, "optical"),
+    "g": FilterParams("g", 4800.0, 1400.0, 22.0, "optical"),
+    "r": FilterParams("r", 6200.0, 1300.0, 20.8, "optical"),
+    "i": FilterParams("i", 7600.0, 1500.0, 19.5, "optical"),
 }
 
 NIR_FILTERS: dict[str, FilterParams] = {
-    "J":  FilterParams("J",  12500, 2600, 16.0, "nir"),
-    "H":  FilterParams("H",  16500, 3000, 14.0, "nir"),
-    "Ks": FilterParams("Ks", 22000, 3500, 13.0, "nir"),
+    "J":  FilterParams("J",  12500.0, 2600.0, 16.0, "nir"),
+    "H":  FilterParams("H",  16500.0, 3000.0, 14.0, "nir"),
+    "Ks": FilterParams("Ks", 22000.0, 3500.0, 13.0, "nir"),
 }
 
 ALL_FILTERS: dict[str, FilterParams] = {**OPTICAL_FILTERS, **NIR_FILTERS}
 
+# Aperturas de telescopio disponibles [m]
+TELESCOPE_APERTURES: list[float] = [2.0, 3.5, 6.5, 8.0]
+
 
 # ---------------------------------------------------------------------------
-# Core physics functions
+# Funciones físicas centrales
 # ---------------------------------------------------------------------------
 
-def mag_ab_to_photon_flux(mag_ab: float, lambda_eff_m: float,
-                           delta_lambda_m: float) -> float:
+def mag_ab_to_photon_flux(
+    mag_ab: float,
+    lambda_eff_m: float,
+    delta_lambda_m: float,
+) -> float:
     """
-    Convert AB magnitude to photon flux [photons/s/m²].
+    Convierte magnitud AB a flujo de fotones integrado en la banda [ph/s/m²].
 
-    F_nu(AB) = 10^(-(mag+48.6)/2.5)  [erg/s/cm²/Hz]  →  SI  →  photon flux.
+    Derivación paso a paso
+    ----------------------
+    1. Magnitud AB → densidad espectral de flujo:
+           F_ν = F₀_AB · 10^(−mag_AB / 2.5)          [W/m²/Hz]
+       donde F₀_AB = 3.631 × 10⁻²³ W/m²/Hz
 
-    Parameters
+    2. Conversión F_ν → F_λ  (por invariancia de energía):
+           F_λ = F_ν · c / λ²                         [W/m²/m]
+
+    3. Integración en la banda (aproximación de banda plana):
+           F_band = F_λ · Δλ                           [W/m²]
+
+    4. Energía por fotón a λ_eff:
+           E_ph = h·c / λ_eff                          [J]
+
+    5. Flujo de fotones:
+           Φ = F_band / E_ph                           [ph/s/m²]
+
+    Parámetros
     ----------
-    mag_ab          : AB magnitude of the source
-    lambda_eff_m    : effective wavelength [m]
-    delta_lambda_m  : filter bandwidth [m]
+    mag_ab        : magnitud AB de la fuente
+    lambda_eff_m  : longitud de onda efectiva del filtro [m]
+    delta_lambda_m: anchura de banda del filtro [m]
 
-    Returns
+    Retorna
     -------
-    Photon flux [photons / s / m²]
+    Flujo de fotones [ph/s/m²]
     """
-    # AB flux density in W/m²/Hz
-    f_nu = AB_F0 * 10.0 ** (-(mag_ab) / 2.5)          # W/m²/Hz
+    # Paso 1: F_ν en SI
+    f_nu: float = AB_F0 * 10.0 ** (-mag_ab / 2.5)          # W/m²/Hz
 
-    # Convert F_nu → F_lambda  [W/m²/m]
-    f_lambda = f_nu * C_LIGHT / lambda_eff_m**2
+    # Paso 2: F_λ en SI
+    f_lambda: float = f_nu * C_LIGHT / lambda_eff_m ** 2   # W/m²/m
 
-    # Integrated flux in band  [W/m²]
-    f_band = f_lambda * delta_lambda_m
+    # Paso 3: flujo integrado en la banda
+    f_band: float = f_lambda * delta_lambda_m               # W/m²
 
-    # Energy per photon  [J]
-    e_photon = H_PLANCK * C_LIGHT / lambda_eff_m
+    # Paso 4: energía por fotón
+    e_photon: float = H_PLANCK * C_LIGHT / lambda_eff_m     # J
 
-    return f_band / e_photon   # photons / s / m²
+    # Paso 5: flujo de fotones
+    return f_band / e_photon                                 # ph/s/m²
 
 
-def enclosed_energy_fraction(aperture_radius_arcsec: float,
-                              seeing_fwhm_arcsec: float) -> float:
+def enclosed_energy_fraction(
+    aperture_radius_arcsec: float,
+    seeing_fwhm_arcsec: float,
+) -> float:
     """
-    Fraction of light from a point source enclosed within a circular aperture,
-    assuming a Gaussian PSF.
+    Fracción de energía encerrada (EE) dentro de una apertura circular,
+    asumiendo una PSF gaussiana bidimensional.
 
-    EE(r) = 1 − exp(−r² / (2·σ²))
-    σ = FWHM / (2·sqrt(2·ln2))
+    Derivación
+    ----------
+    Para una gaussiana circular con σ:
+        I(r) = (1/2πσ²) · exp(−r²/2σ²)
+
+    La fracción encerrada en un círculo de radio r_ap es:
+        EE(r_ap) = ∫₀^{r_ap} I(r) · 2πr dr
+                 = 1 − exp(−r_ap² / 2σ²)
+
+    Relación FWHM–σ:
+        FWHM = 2·√(2·ln2)·σ  →  σ = FWHM / (2·√(2·ln2))
+
+    Nota: PSFs reales (e.g., Moffat) tienen alas más extendidas que una
+    gaussiana; esto subestima la energía en alas largas.
+
+    Parámetros
+    ----------
+    aperture_radius_arcsec : radio de la apertura fotométrica [arcsec]
+    seeing_fwhm_arcsec     : FWHM del seeing atmosférico [arcsec]
+
+    Retorna
+    -------
+    Fracción de energía encerrada (0–1)
     """
-    sigma = seeing_fwhm_arcsec / (2.0 * math.sqrt(2.0 * math.log(2.0)))
-    return 1.0 - math.exp(-aperture_radius_arcsec**2 / (2.0 * sigma**2))
+    sigma: float = seeing_fwhm_arcsec / (2.0 * math.sqrt(2.0 * math.log(2.0)))
+    return 1.0 - math.exp(-aperture_radius_arcsec ** 2 / (2.0 * sigma ** 2))
 
 
-def aperture_n_pixels(aperture_radius_arcsec: float,
-                      pixel_scale_arcsec: float) -> float:
+def aperture_n_pixels(
+    aperture_radius_arcsec: float,
+    pixel_scale_arcsec: float,
+) -> float:
     """
-    Number of pixels inside a circular aperture of given radius.
-    n_pix = π · (r/plate_scale)²
+    Número de píxeles dentro de una apertura circular de radio dado.
+
+        n_pix = π · (r_ap / plate_scale)²
+
+    Parámetros
+    ----------
+    aperture_radius_arcsec : radio de la apertura [arcsec]
+    pixel_scale_arcsec     : escala de placa del detector [arcsec/pix]
+
+    Retorna
+    -------
+    Número de píxeles (puede ser no entero; representa el área media)
     """
-    r_pix = aperture_radius_arcsec / pixel_scale_arcsec
-    return math.pi * r_pix**2
+    r_pix: float = aperture_radius_arcsec / pixel_scale_arcsec
+    return math.pi * r_pix ** 2
 
 
-def sky_photon_rate(sky_mag_arcsec2: float,
-                    lambda_eff_m: float,
-                    delta_lambda_m: float,
-                    collecting_area_m2: float,
-                    throughput: float,
-                    qe: float,
-                    pixel_scale_arcsec: float) -> float:
+def sky_electron_rate_per_pixel(
+    sky_mag_arcsec2: float,
+    lambda_eff_m: float,
+    delta_lambda_m: float,
+    collecting_area_m2: float,
+    throughput: float,
+    qe: float,
+    pixel_scale_arcsec: float,
+) -> float:
     """
-    Sky background electron rate per pixel [e⁻/s/pix].
+    Tasa de electrones del fondo de cielo por píxel [e⁻/s/pix].
 
-    Converts sky surface brightness (mag/arcsec²) to a per-pixel rate.
+    El cielo se trata como una fuente extendida con brillo superficial
+    sky_mag_arcsec² [AB mag/arcsec²]. La conversión es:
+
+        sky_rate_pix = Φ(sky_mag) · Ω_pix · A · η · QE
+
+    donde Ω_pix = pixel_scale² es el área sólida de un píxel [arcsec²].
+
+    Parámetros
+    ----------
+    sky_mag_arcsec2     : brillo superficial del cielo [AB mag/arcsec²]
+    lambda_eff_m        : longitud de onda efectiva [m]
+    delta_lambda_m      : anchura de banda [m]
+    collecting_area_m2  : área efectiva del telescopio [m²]
+    throughput          : transmisión total del sistema (0–1)
+    qe                  : eficiencia cuántica del detector (0–1)
+    pixel_scale_arcsec  : escala de placa [arcsec/pix]
+
+    Retorna
+    -------
+    Tasa de electrones de cielo por píxel [e⁻/s/pix]
     """
-    flux_per_arcsec2 = mag_ab_to_photon_flux(sky_mag_arcsec2, lambda_eff_m,
-                                              delta_lambda_m)
-    pixel_area_arcsec2 = pixel_scale_arcsec**2
-    return flux_per_arcsec2 * pixel_area_arcsec2 * collecting_area_m2 * throughput * qe
+    flux_per_arcsec2: float = mag_ab_to_photon_flux(
+        sky_mag_arcsec2, lambda_eff_m, delta_lambda_m
+    )
+    omega_pix: float = pixel_scale_arcsec ** 2          # arcsec²/pix
+    eta_total: float = throughput * qe
+    return flux_per_arcsec2 * omega_pix * collecting_area_m2 * eta_total
 
 
 # ---------------------------------------------------------------------------
-# Main calculation result
+# Contenedor de resultados
 # ---------------------------------------------------------------------------
 
 @dataclass
 class ETCResult:
-    """All outputs from a single ETC computation."""
-    # Input echo (for display)
+    """Todos los valores de salida de un cálculo CTE."""
+
+    # Eco de entradas (para visualización)
     object_mag: float
     exposure_time_s: float
     filter_name: str
     telescope_diameter_m: float
 
-    # Signals [e⁻]
+    # Señales [e⁻]
     signal_e: float
     sky_signal_e: float
     dark_signal_e: float
-    read_noise_total_e2: float   # variance term: RON² × n_pix × n_reads
+    read_noise_total_e2: float   # varianza total: RON² × n_pix × n_reads  [e⁻²]
 
-    # Derived
+    # Derivados
     snr: float
     n_pixels: float
     enclosed_energy: float
-    noise_regime: str            # "sky-limited", "read-noise-limited", "dark-limited", "shot-noise-limited"
+    noise_regime: str            # "sky-limited" | "read-noise-limited" |
+                                 # "dark-limited" | "shot-noise-limited"
 
-    # For solving t given S/N
-    time_for_target_snr: float | None = None
-    target_snr: float | None = None
+    # Para el modo de resolución de tiempo dado un S/N objetivo
+    time_for_target_snr: Optional[float] = None
+    target_snr: Optional[float] = None
+
+    # Tasas intermedias (útiles para diagnóstico)
+    sky_rate_per_pix_e_s: float = 0.0   # [e⁻/s/pix]
+    object_photon_flux: float = 0.0     # [ph/s/m²]
+
+    # Intensidades máximas por píxel (para saturación)
+    sky_max_e_pix: float = 0.0
+    source_max_e_pix: float = 0.0
+
+    @property
+    def total_noise_e(self) -> float:
+        """Ruido total RMS [e⁻]."""
+        return math.sqrt(
+            self.signal_e
+            + self.sky_signal_e
+            + self.dark_signal_e
+            + self.read_noise_total_e2
+        )
+
+    @property
+    def snr_sky_limited(self) -> float:
+        """S/N en el límite dominado por el cielo (aproximación)."""
+        if self.sky_signal_e <= 0:
+            return 0.0
+        return self.signal_e / math.sqrt(self.sky_signal_e)
+
+    @property
+    def snr_shot_limited(self) -> float:
+        """S/N en el límite dominado por el shot noise del objeto."""
+        if self.signal_e <= 0:
+            return 0.0
+        return math.sqrt(self.signal_e)
 
 
 # ---------------------------------------------------------------------------
-# ETC engine
+# Motor CTE principal
 # ---------------------------------------------------------------------------
 
 def compute_snr(
@@ -242,68 +382,101 @@ def compute_snr(
     source_type: Literal["point", "extended"] = "point",
 ) -> ETCResult:
     """
-    Compute S/N for a given exposure time.
+    Calcula la relación señal-ruido (S/N) para un tiempo de exposición dado.
 
-    Parameters
+    Ecuación completa de S/N
+    ------------------------
+    S/N = S / √(S + N_sky + N_dark + σ_RON² · n_pix · n_reads)
+
+    donde:
+        S       = Φ · A · η_total · EE(r_ap) · t             [e⁻]
+        N_sky   = sky_rate_pix · n_pix · t                   [e⁻]
+        N_dark  = dark_current · n_pix · t                   [e⁻]
+        σ_RON²  = read_noise² · n_pix · n_reads              [e⁻²]
+
+    Parámetros
     ----------
-    object_mag      : AB magnitude of the target
-    exposure_time_s : integration time [s]
-    telescope       : TelescopeParams instance
-    filter_params   : FilterParams instance
-    detector        : DetectorParams instance
-    conditions      : ObservingConditions instance
-    source_type     : 'point' or 'extended' (extended disables EE correction)
+    object_mag      : magnitud AB del objeto
+    exposure_time_s : tiempo de integración [s]
+    telescope       : instancia de TelescopeParams
+    filter_params   : instancia de FilterParams
+    detector        : instancia de DetectorParams
+    conditions      : instancia de ObservingConditions
+    source_type     : 'point' → aplica corrección EE;
+                      'extended' → EE = 1 (toda la apertura captura flujo)
 
-    Returns
+    Retorna
     -------
-    ETCResult
+    ETCResult con todos los campos populados
     """
-    t = exposure_time_s
-    A = telescope.collecting_area_m2
-    lam = filter_params.lambda_eff_m
-    dlam = filter_params.delta_lambda_m
-    eta = conditions.total_throughput * detector.quantum_efficiency
+    t: float = exposure_time_s
+    A: float = telescope.collecting_area_m2
+    lam: float = filter_params.lambda_eff_m
+    dlam: float = filter_params.delta_lambda_m
 
-    # --- Object signal [e⁻] ---
-    photon_flux = mag_ab_to_photon_flux(object_mag, lam, dlam)  # ph/s/m²
+    # Eficiencia combinada de óptica + detector
+    eta: float = conditions.total_throughput * detector.quantum_efficiency
+
+    # ── Señal del objeto [e⁻] ──────────────────────────────────────────────
+    photon_flux: float = mag_ab_to_photon_flux(object_mag, lam, dlam)  # ph/s/m²
 
     if source_type == "point":
-        ee = enclosed_energy_fraction(conditions.aperture_radius_arcsec,
-                                      conditions.seeing_fwhm_arcsec)
+        ee: float = enclosed_energy_fraction(
+            conditions.aperture_radius_arcsec,
+            conditions.seeing_fwhm_arcsec,
+        )
     else:
-        # Extended: aperture collects all surface brightness within aperture area
-        # EE fraction = 1 (no PSF concentration correction)
+        # Fuente extendida: la apertura captura todo el brillo superficial
+        # dentro de ella; no hay concentración por PSF
         ee = 1.0
 
-    signal_e = photon_flux * A * eta * ee * t   # e⁻
+    signal_e: float = photon_flux * A * eta * ee * t   # e⁻
 
-    # --- Number of pixels in aperture ---
-    n_pix = aperture_n_pixels(conditions.aperture_radius_arcsec,
-                               detector.pixel_scale_arcsec)
-
-    # --- Sky background [e⁻] ---
-    sky_rate_per_pix = sky_photon_rate(
-        filter_params.sky_mag_arcsec2, lam, dlam, A,
-        conditions.total_throughput, detector.quantum_efficiency,
+    # ── Número de píxeles en la apertura ─────────────────────────────────
+    n_pix: float = aperture_n_pixels(
+        conditions.aperture_radius_arcsec,
         detector.pixel_scale_arcsec,
     )
-    sky_signal_e = sky_rate_per_pix * n_pix * t   # e⁻
 
-    # --- Dark current [e⁻] ---
-    dark_signal_e = detector.dark_current_e_s * n_pix * t   # e⁻
+    # ── Fondo de cielo [e⁻] ───────────────────────────────────────────────
+    sky_rate: float = sky_electron_rate_per_pixel(
+        filter_params.sky_mag_arcsec2,
+        lam, dlam, A,
+        conditions.total_throughput,
+        detector.quantum_efficiency,
+        detector.pixel_scale_arcsec,
+    )
+    sky_signal_e: float = sky_rate * n_pix * t   # e⁻
 
-    # --- Read noise variance [e⁻²] ---
-    read_noise_var = (detector.read_noise_e**2) * n_pix * conditions.n_reads
+    # ── Corriente oscura [e⁻] ─────────────────────────────────────────────
+    dark_signal_e: float = detector.dark_current_e_s * n_pix * t   # e⁻
 
-    # --- Total noise² ---
-    total_noise2 = signal_e + sky_signal_e + dark_signal_e + read_noise_var
+    # ── Varianza del ruido de lectura [e⁻²] ──────────────────────────────
+    read_noise_var: float = (
+        detector.read_noise_e ** 2 * n_pix * conditions.n_reads
+    )
 
-    # --- S/N ---
-    snr = signal_e / math.sqrt(total_noise2) if total_noise2 > 0 else 0.0
+    # ── Varianza total y S/N ──────────────────────────────────────────────
+    total_noise2: float = (
+        signal_e + sky_signal_e + dark_signal_e + read_noise_var
+    )
+    snr: float = signal_e / math.sqrt(total_noise2) if total_noise2 > 0 else 0.0
 
-    # --- Noise regime identification ---
-    noise_regime = _identify_noise_regime(signal_e, sky_signal_e,
-                                           dark_signal_e, read_noise_var)
+    # ── Identificación del régimen dominante ──────────────────────────────
+    noise_regime: str = _identify_noise_regime(
+        signal_e, sky_signal_e, dark_signal_e, read_noise_var
+    )
+
+    # ── Intensidades por píxel (diagnóstico) ─────────────────────────────
+    # Pico de la fuente puntual: asumimos que el píxel central recibe
+    # la fracción de flujo correspondiente al área de un píxel dentro del PSF
+    sigma_pix: float = (conditions.seeing_fwhm_arcsec / detector.pixel_scale_arcsec) / (
+        2.0 * math.sqrt(2.0 * math.log(2.0))
+    )
+    peak_fraction: float = (
+        1.0 - math.exp(-0.5 / sigma_pix ** 2)
+    ) if source_type == "point" else (1.0 / n_pix)
+    source_max_e_pix: float = photon_flux * A * eta * peak_fraction * t
 
     return ETCResult(
         object_mag=object_mag,
@@ -318,6 +491,10 @@ def compute_snr(
         n_pixels=n_pix,
         enclosed_energy=ee,
         noise_regime=noise_regime,
+        sky_rate_per_pix_e_s=sky_rate,
+        object_photon_flux=photon_flux,
+        sky_max_e_pix=sky_rate * t,
+        source_max_e_pix=source_max_e_pix,
     )
 
 
@@ -330,41 +507,66 @@ def compute_exposure_time(
     conditions: ObservingConditions,
     source_type: Literal["point", "extended"] = "point",
     t_min: float = 0.1,
-    t_max: float = 1e6,
-    tol: float = 1e-4,
+    t_max: float = 1_000_000.0,
+    tol: float = 1e-5,
 ) -> ETCResult:
     """
-    Solve for the exposure time needed to reach a target S/N via bisection.
+    Resuelve el tiempo de exposición necesario para alcanzar un S/N objetivo
+    mediante bisección numérica.
 
-    Returns an ETCResult evaluated at the solved time, with
-    ``time_for_target_snr`` and ``target_snr`` populated.
+    El S/N crece monótonamente con t, por lo que la bisección converge
+    siempre que el S/N objetivo sea alcanzable dentro del intervalo [t_min, t_max].
+
+    Parámetros
+    ----------
+    object_mag  : magnitud AB del objeto
+    target_snr  : S/N objetivo
+    telescope   : TelescopeParams
+    filter_params: FilterParams
+    detector    : DetectorParams
+    conditions  : ObservingConditions
+    source_type : 'point' | 'extended'
+    t_min       : límite inferior del intervalo de búsqueda [s]
+    t_max       : límite superior del intervalo de búsqueda [s]
+    tol         : tolerancia relativa de convergencia
+
+    Retorna
+    -------
+    ETCResult evaluado en el tiempo resuelto, con time_for_target_snr y
+    target_snr populados.
+
+    Lanza
+    -----
+    ValueError si el S/N objetivo no se puede alcanzar en [t_min, t_max].
     """
-    # Validate that t_max is sufficient
-    result_max = compute_snr(object_mag, t_max, telescope, filter_params,
-                              detector, conditions, source_type)
+    result_max = compute_snr(
+        object_mag, t_max, telescope, filter_params, detector, conditions, source_type
+    )
     if result_max.snr < target_snr:
         raise ValueError(
-            f"Cannot reach S/N={target_snr:.1f} even at t={t_max:.0f} s "
-            f"(max achievable S/N ≈ {result_max.snr:.1f}). "
-            "Try a brighter object or a larger telescope."
+            f"No se puede alcanzar S/N = {target_snr:.1f} "
+            f"ni siquiera en t = {format_time(t_max)} "
+            f"(S/N máximo ≈ {result_max.snr:.1f}). "
+            "Prueba con un objeto más brillante o un telescopio mayor."
         )
 
-    # Bisection
     lo, hi = t_min, t_max
-    for _ in range(60):
+    for _ in range(80):   # 80 iteraciones → precisión de ~10⁻²⁴ en la razón hi/lo
         mid = (lo + hi) / 2.0
-        snr_mid = compute_snr(object_mag, mid, telescope, filter_params,
-                               detector, conditions, source_type).snr
+        snr_mid = compute_snr(
+            object_mag, mid, telescope, filter_params, detector, conditions, source_type
+        ).snr
         if snr_mid < target_snr:
             lo = mid
         else:
             hi = mid
-        if (hi - lo) / max(hi, 1e-9) < tol:
+        if (hi - lo) / max(hi, 1e-12) < tol:
             break
 
     t_solved = (lo + hi) / 2.0
-    result = compute_snr(object_mag, t_solved, telescope, filter_params,
-                          detector, conditions, source_type)
+    result = compute_snr(
+        object_mag, t_solved, telescope, filter_params, detector, conditions, source_type
+    )
     result.time_for_target_snr = t_solved
     result.target_snr = target_snr
     return result
@@ -379,45 +581,227 @@ def snr_vs_time(
     source_type: Literal["point", "extended"] = "point",
     t_start: float = 1.0,
     t_end: float = 3600.0,
-    n_points: int = 200,
+    n_points: int = 300,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return arrays (times, snrs) for plotting S/N vs. exposure time.
+    Genera arrays (tiempos, S/Ns) para la curva S/N vs. tiempo de exposición.
+
+    Los tiempos se distribuyen logarítmicamente para capturar bien tanto
+    el régimen dominado por ruido de lectura (tiempos cortos) como el
+    régimen dominado por el cielo (tiempos largos).
+
+    Retorna
+    -------
+    (times [s], snrs) como arrays numpy
     """
-    times = np.logspace(math.log10(t_start), math.log10(t_end), n_points)
-    snrs = np.array([
-        compute_snr(object_mag, float(t), telescope, filter_params,
-                    detector, conditions, source_type).snr
+    times: np.ndarray = np.logspace(
+        math.log10(t_start), math.log10(t_end), n_points
+    )
+    snrs: np.ndarray = np.array([
+        compute_snr(
+            object_mag, float(t), telescope, filter_params,
+            detector, conditions, source_type
+        ).snr
         for t in times
     ])
     return times, snrs
 
 
+def snr_vs_magnitude(
+    exposure_time_s: float,
+    telescope: TelescopeParams,
+    filter_params: FilterParams,
+    detector: DetectorParams,
+    conditions: ObservingConditions,
+    source_type: Literal["point", "extended"] = "point",
+    mag_start: float = 14.0,
+    mag_end: float = 28.0,
+    n_points: int = 200,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Genera arrays (magnitudes, S/Ns) para la curva S/N vs. magnitud.
+
+    Útil para determinar la magnitud límite del telescopio para un S/N
+    y tiempo de exposición dados.
+
+    Retorna
+    -------
+    (mags, snrs) como arrays numpy
+    """
+    mags: np.ndarray = np.linspace(mag_start, mag_end, n_points)
+    snrs: np.ndarray = np.array([
+        compute_snr(
+            float(m), exposure_time_s, telescope, filter_params,
+            detector, conditions, source_type
+        ).snr
+        for m in mags
+    ])
+    return mags, snrs
+
+
+def limiting_magnitude(
+    exposure_time_s: float,
+    target_snr: float,
+    telescope: TelescopeParams,
+    filter_params: FilterParams,
+    detector: DetectorParams,
+    conditions: ObservingConditions,
+    source_type: Literal["point", "extended"] = "point",
+    mag_min: float = 10.0,
+    mag_max: float = 35.0,
+    tol: float = 1e-4,
+) -> float:
+    """
+    Calcula la magnitud límite alcanzable para un S/N y tiempo dados
+    mediante bisección sobre la magnitud.
+
+    Retorna
+    -------
+    Magnitud AB límite (cuanto mayor, más débil la fuente detectable).
+    """
+    snr_at_max = compute_snr(
+        mag_max, exposure_time_s, telescope, filter_params,
+        detector, conditions, source_type
+    ).snr
+    if snr_at_max >= target_snr:
+        return mag_max  # el telescopio puede ir aún más profundo
+
+    lo, hi = mag_min, mag_max
+    for _ in range(80):
+        mid = (lo + hi) / 2.0
+        snr_mid = compute_snr(
+            mid, exposure_time_s, telescope, filter_params,
+            detector, conditions, source_type
+        ).snr
+        if snr_mid > target_snr:
+            lo = mid
+        else:
+            hi = mid
+        if abs(hi - lo) < tol:
+            break
+    return (lo + hi) / 2.0
+
+
 # ---------------------------------------------------------------------------
-# Helpers
+# Funciones auxiliares
 # ---------------------------------------------------------------------------
 
-def _identify_noise_regime(signal_e: float, sky_e: float,
-                             dark_e: float, rn2: float) -> str:
-    """Return a string label for the dominant noise source."""
-    terms = {
+def _identify_noise_regime(
+    signal_e: float,
+    sky_e: float,
+    dark_e: float,
+    rn2: float,
+) -> str:
+    """Identifica y devuelve el régimen dominante de ruido."""
+    terms: dict[str, float] = {
         "sky-limited":        sky_e,
         "shot-noise-limited": signal_e,
         "dark-limited":       dark_e,
         "read-noise-limited": rn2,
     }
-    return max(terms, key=terms.get)
+    return max(terms, key=lambda k: terms[k])
 
 
 def detector_for_filter(f: FilterParams) -> DetectorParams:
-    """Return the standard detector matching the filter mode."""
+    """Devuelve el detector estándar correspondiente al modo del filtro."""
     return OPTICAL_DETECTOR if f.mode == "optical" else NIR_DETECTOR
 
 
+def default_aperture_radius(seeing_fwhm_arcsec: float) -> float:
+    """
+    Radio de apertura fotométrica por defecto según el proyecto:
+        r_ap = 1.2 × FWHM
+
+    Esta elección optimiza el S/N en el régimen dominado por el cielo
+    para una PSF gaussiana (ver Naylor 1998).
+    """
+    return 1.2 * seeing_fwhm_arcsec
+
+
 def format_time(seconds: float) -> str:
-    """Human-readable exposure time string."""
-    if seconds < 60:
+    """Formatea un tiempo de exposición en una cadena legible."""
+    if seconds < 1.0:
+        return f"{seconds*1000:.0f} ms"
+    if seconds < 60.0:
         return f"{seconds:.1f} s"
-    if seconds < 3600:
+    if seconds < 3600.0:
         return f"{seconds/60:.1f} min"
     return f"{seconds/3600:.2f} h"
+
+
+def noise_budget(result: ETCResult) -> dict[str, float]:
+    """
+    Devuelve el presupuesto de ruido como fracción porcentual de la varianza total.
+
+    Retorna
+    -------
+    dict con claves: 'shot_noise', 'sky', 'dark', 'read_noise', 'total_var'
+    """
+    total_var: float = (
+        result.signal_e
+        + result.sky_signal_e
+        + result.dark_signal_e
+        + result.read_noise_total_e2
+    )
+    if total_var == 0:
+        return {"shot_noise": 0, "sky": 0, "dark": 0, "read_noise": 0, "total_var": 0}
+
+    return {
+        "shot_noise":  100.0 * result.signal_e              / total_var,
+        "sky":         100.0 * result.sky_signal_e          / total_var,
+        "dark":        100.0 * result.dark_signal_e         / total_var,
+        "read_noise":  100.0 * result.read_noise_total_e2   / total_var,
+        "total_var":   total_var,
+    }
+
+
+def saturation_time(
+    object_mag: float,
+    telescope: TelescopeParams,
+    filter_params: FilterParams,
+    detector: DetectorParams,
+    conditions: ObservingConditions,
+    saturation_level_e: float = 65_000.0,
+    source_type: Literal["point", "extended"] = "point",
+) -> float:
+    """
+    Tiempo de exposición en el que el píxel pico se satura [s].
+
+    Parámetros
+    ----------
+    saturation_level_e : pozo de carga del detector [e⁻/pix], típico CCD 16-bit
+    """
+    # Evaluar a t = 1 s para obtener la tasa por píxel pico
+    result = compute_snr(
+        object_mag, 1.0, telescope, filter_params, detector, conditions, source_type
+    )
+    peak_rate = result.source_max_e_pix + result.sky_max_e_pix  # e⁻/s/pix @ t=1s
+    if peak_rate <= 0:
+        return float("inf")
+    return saturation_level_e / peak_rate
+
+
+# ---------------------------------------------------------------------------
+# Validación básica
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # Caso de prueba rápida
+    tel = TelescopeParams(diameter_m=3.5, obstruction_fraction=0.12)
+    filt = OPTICAL_FILTERS["r"]
+    det = detector_for_filter(filt)
+    cond = ObservingConditions(
+        seeing_fwhm_arcsec=0.8,
+        aperture_radius_arcsec=default_aperture_radius(0.8),
+        total_throughput=0.80,
+    )
+
+    r = compute_snr(20.0, 600.0, tel, filt, det, cond)
+    print(f"S/N = {r.snr:.2f}  |  Régimen: {r.noise_regime}")
+    print(f"Señal: {r.signal_e:.0f} e⁻  |  Cielo: {r.sky_signal_e:.0f} e⁻")
+    print(f"RON²×npix: {r.read_noise_total_e2:.0f} e⁻²  |  n_pix: {r.n_pixels:.1f}")
+    print(f"EE: {r.enclosed_energy*100:.1f}%  |  Área: {tel.collecting_area_m2:.3f} m²")
+
+    r2 = compute_exposure_time(20.0, 10.0, tel, filt, det, cond)
+    print(f"\nPara S/N=10: t = {format_time(r2.time_for_target_snr)}")
+    print(f"Mag límite (600 s, S/N=5): {limiting_magnitude(600, 5, tel, filt, det, cond):.2f} AB")
