@@ -13,7 +13,6 @@ No physics lives here. All science is imported from backend.py.
 """
 
 import math
-
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
@@ -44,179 +43,264 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS — dark observatory aesthetic
+# Theme Management - Professional Dark/Light Toggle
 # ---------------------------------------------------------------------------
-st.markdown("""
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'dark'
+
+def set_theme(theme):
+    """Set application theme (dark/light)"""
+    st.session_state.theme = theme
+    st.rerun()
+
+# Theme toggle button in header
+col_header_left, col_header_right = st.columns([3, 1])
+with col_header_left:
+    st.markdown("# 🔭 Exposure Time Calculator")
+with col_header_right:
+    theme_btn = st.button(
+        "🌙" if st.session_state.theme == 'dark' else "☀️", 
+        key="theme_toggle",
+        help="Toggle Light/Dark Theme",
+        use_container_width=False
+    )
+    if theme_btn:
+        new_theme = 'light' if st.session_state.theme == 'dark' else 'dark'
+        set_theme(new_theme)
+
+# Dynamic CSS based on theme
+theme_colors = {
+    'dark': {
+        'bg_primary': '#0a0e17',
+        'bg_secondary': '#0f1623',
+        'bg_tertiary': '#111827',
+        'text_primary': '#e2e8f0',
+        'text_secondary': '#94a3b8',
+        'text_muted': '#64748b',
+        'border': '#1e293b',
+        'border_accent': '#1e3a5f',
+        'accent_primary': '#60a5fa',
+        'accent_secondary': '#1d4ed8',
+        'success': '#10b981',
+        'warning': '#f59e0b',
+        'gradient': 'linear-gradient(135deg, #0f2a4a 0%, #0a1628 100%)'
+    },
+    'light': {
+        'bg_primary': '#f8fafc',
+        'bg_secondary': '#f1f5f9',
+        'bg_tertiary': '#ffffff',
+        'text_primary': '#0f172a',
+        'text_secondary': '#475569',
+        'text_muted': '#64748b',
+        'border': '#e2e8f0',
+        'border_accent': '#cbd5e1',
+        'accent_primary': '#3b82f6',
+        'accent_secondary': '#1d4ed8',
+        'success': '#059669',
+        'warning': '#d97706',
+        'gradient': 'linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%)'
+    }
+}
+
+colors = theme_colors[st.session_state.theme]
+
+css = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;500;700&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-h1, h2, h3 {
-    font-family: 'Space Mono', monospace !important;
-    letter-spacing: -0.03em;
-}
-.stApp {
-    background: #0a0e17;
-    color: #e2e8f0;
-}
-section[data-testid="stSidebar"] {
-    background: #0f1623 !important;
-    border-right: 1px solid #1e293b;
-}
-/* Metric cards */
-div[data-testid="metric-container"] {
-    background: #111827;
-    border: 1px solid #1e3a5f;
-    border-radius: 10px;
-    padding: 12px 18px;
-}
-/* Result box */
-.result-box {
-    background: linear-gradient(135deg, #0f2a4a 0%, #0a1628 100%);
-    border: 1px solid #1d4ed8;
-    border-radius: 12px;
-    padding: 24px 28px;
-    margin-bottom: 20px;
-}
-.snr-value {
-    font-family: 'Space Mono', monospace;
-    font-size: 3.2rem;
-    font-weight: 700;
-    color: #60a5fa;
-    line-height: 1.0;
-}
-.regime-badge {
-    display: inline-block;
-    padding: 3px 12px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-family: 'Space Mono', monospace;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-.sky-limited      { background:#164e63; color:#67e8f9; border:1px solid #0e7490; }
-.read-noise-limited { background:#312e81; color:#a5b4fc; border:1px solid #4338ca; }
-.shot-noise-limited { background:#14532d; color:#86efac; border:1px solid #15803d; }
-.dark-limited      { background:#431407; color:#fdba74; border:1px solid #c2410c; }
-.info-row { display:flex; gap:24px; flex-wrap:wrap; margin-top:14px; }
-.info-item { font-size:0.82rem; color:#94a3b8; }
-.info-item span { color:#e2e8f0; font-weight:600; }
-hr.dim { border:none; border-top:1px solid #1e293b; margin:18px 0; }
+:root {{
+  --bg-primary: {colors['bg_primary']};
+  --bg-secondary: {colors['bg_secondary']};
+  --bg-tertiary: {colors['bg_tertiary']};
+  --text-primary: {colors['text_primary']};
+  --text-secondary: {colors['text_secondary']};
+  --text-muted: {colors['text_muted']};
+  --border: {colors['border']};
+  --border-accent: {colors['border_accent']};
+  --accent-primary: {colors['accent_primary']};
+  --accent-secondary: {colors['accent_secondary']};
+}}
+
+* {{
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}}
+
+h1, h2, h3, h4 {{
+  font-family: 'Space Mono', 'Roboto Mono', monospace !important;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}}
+
+.stApp {{
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}}
+
+section[data-testid="stSidebar"] {{
+  background: var(--bg-secondary) !important;
+  border-right: 1px solid var(--border);
+}}
+
+div[data-testid="metric-container"] {{
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-accent);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}}
+
+.result-box {{
+  background: {colors['gradient']};
+  border: 1px solid var(--accent-secondary);
+  border-radius: 16px;
+  padding: 2rem 2.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0,0, 0.1);
+}}
+
+.snr-value {{
+  font-family: 'Space Mono', monospace;
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  line-height: 1;
+  margin: 0.25rem 0;
+}}
+
+.regime-badge {{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-family: 'Space Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}}
+.sky-limited {{ background: #164e63; color: #67e8f9; border: 1px solid #0e7490; }}
+.read-noise-limited {{ background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }}
+.shot-noise-limited {{ background: #14532d; color: #86efac; border: 1px solid #15803d; }}
+.dark-limited {{ background: #431407; color: #fdba74; border: 1px solid #c2410c; }}
+
+.info-row {{
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}}
+.info-item {{
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}}
+.info-item span {{
+  color: var(--text-primary);
+  font-weight: 600;
+}}
+
+hr {{
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}}
+
+.stMetric > label {{
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+}}
+.stMetric > div > div {{
+  color: var(--text-primary) !important;
+}}
+
+button[kind="primary"] {{
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+}}
 </style>
-""", unsafe_allow_html=True)
-
+"""
+st.markdown(css, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Sidebar — all inputs
+# Sidebar — Professional Input Controls
 # ---------------------------------------------------------------------------
-
 with st.sidebar:
-    st.markdown("# 🔭 ETC")
-    st.markdown("**Exposure Time Calculator**")
-    st.caption("Optical / Near-IR · ESO-inspired model")
-    st.markdown("---")
-
-    # --- Telescope ---
-    st.markdown("### Telescope")
-    diam = st.number_input(
-        "Primary diameter (m)",
-        min_value=0.1, max_value=40.0, value=1.0, step=0.1,
-        help="Effective aperture of the primary mirror in meters.",
-    )
-    obstruction = st.slider(
-        "Central obstruction (linear fraction)",
-        min_value=0.0, max_value=0.4, value=0.12, step=0.01,
-        help="Fraction of the primary diameter blocked by the secondary mirror.",
-    )
-    throughput = st.slider(
-        "Total system throughput",
-        min_value=0.1, max_value=1.0, value=0.80, step=0.01,
-        help="Combined transmission of telescope optics, mirrors and filter.",
-    )
-
-    st.markdown("---")
-    # --- Filter / Instrument ---
-    st.markdown("### Filter & Mode")
-    mode = st.radio("Observing mode", ["Optical", "Near-IR"], horizontal=True)
-    filter_dict = OPTICAL_FILTERS if mode == "Optical" else NIR_FILTERS
-    filter_name = st.selectbox("Filter", list(filter_dict.keys()))
-    filt = filter_dict[filter_name]
-    det  = detector_for_filter(filt)
-
-    st.caption(
-        f"λ_eff = {filt.lambda_eff_angstrom:.0f} Å  ·  "
-        f"Δλ = {filt.delta_lambda_angstrom:.0f} Å  ·  "
-        f"Sky = {filt.sky_mag_arcsec2:.1f} mag/arcsec²"
-    )
-
-    st.markdown("---")
-    # --- Source ---
-    st.markdown("### Source")
-    source_type = st.radio("Source type", ["Point source", "Extended"],
-                            horizontal=True)
-    src = "point" if source_type == "Point source" else "extended"
-    object_mag = st.number_input(
-        "Object magnitude (AB)",
-        min_value=0.0, max_value=35.0, value=20.0, step=0.1,
-        help="AB magnitude of the target in the selected filter.",
-    )
-
-    st.markdown("---")
-    # --- Observing conditions ---
-    st.markdown("### Observing Conditions")
-    seeing = st.slider(
-        "Seeing FWHM (arcsec)",
-        min_value=0.3, max_value=3.0, value=1.0, step=0.05,
-    )
-    ap_radius = st.slider(
-        "Aperture radius (arcsec)",
-        min_value=0.3, max_value=5.0, value=1.5, step=0.1,
-        help="Radius of the circular photometric aperture.",
-    )
-    n_reads = st.number_input(
-        "Number of detector reads",
-        min_value=1, max_value=50, value=1,
-        help="For NIR up-the-ramp sampling, set > 1.",
-    )
-
-    st.markdown("---")
-    # --- Calculation mode ---
-    st.markdown("### Calculation Mode")
-    calc_mode = st.radio(
-        "Solve for …",
-        ["S/N given exposure time", "Exposure time given S/N"],
-        help="Choose whether you specify time or target S/N.",
-    )
-
-    if calc_mode == "S/N given exposure time":
-        exp_time = st.number_input(
-            "Exposure time (s)",
-            min_value=0.1, max_value=1e6, value=600.0, step=10.0,
+    st.markdown("### 🔭 Telescope Configuration")
+    
+    col_tel1, col_tel2 = st.columns(2)
+    with col_tel1:
+        diam = st.number_input(
+            "Aperture (m)", min_value=0.1, max_value=40.0, 
+            value=1.0, step=0.1, format="%.1f"
         )
+    with col_tel2:
+        obstruction = st.slider("Obstruction", 0.0, 0.4, 0.12, 0.01)
+    
+    throughput = st.slider("Throughput", 0.1, 1.0, 0.80, 0.01)
+    
+    st.divider()
+    
+    st.markdown("### 🌈 Filter & Instrument")
+    col_mode1, col_mode2 = st.columns([2, 1])
+    with col_mode1:
+        mode = st.radio("Mode", ["Optical", "Near-IR"], horizontal=True)
+    with col_mode2:
+        filter_dict = OPTICAL_FILTERS if mode == "Optical" else NIR_FILTERS
+        filter_name = st.selectbox("Filter", list(filter_dict.keys()), label_visibility="collapsed")
+    
+    filt = filter_dict[filter_name]
+    det = detector_for_filter(filt)
+    
+    st.caption(f"**{filt.name}** | λ={filt.lambda_eff_angstrom/1000:.1f} nm | "
+              f"Δλ={filt.delta_lambda_angstrom/1000:.0f} nm | "
+              f"Sky={filt.sky_mag_arcsec2:.1f} mag/″²")
+    
+    st.divider()
+    
+    st.markdown("### ⭐ Target Source")
+    source_type = st.radio("Type", ["Point source", "Extended"], horizontal=True)
+    src = "point" if source_type == "Point source" else "extended"
+    
+    object_mag = st.number_input("Magnitude (AB)", 0.0, 35.0, 20.0, 0.1)
+    
+    st.divider()
+    
+    st.markdown("### ☁️ Observing Conditions")
+    seeing = st.slider("Seeing (″)", 0.3, 3.0, 1.0, 0.05)
+    ap_radius = st.slider("Aperture (″)", 0.3, 5.0, 1.5, 0.1)
+    n_reads = st.number_input("N_reads", 1, 50, 1)
+    
+    st.divider()
+    
+    st.markdown("### ⚙️ Calculation")
+    calc_mode = st.radio("Solve for", ["S/N", "Time"], horizontal=True,
+                        format_func=lambda x: "S/N given t" if x == "S/N" else "t given S/N")
+    
+    if calc_mode == "S/N":
+        exp_time = st.number_input("Exposure (s)", 0.1, 1e6, 600.0, 10.0)
         target_snr_input = None
     else:
-        target_snr_input = st.number_input(
-            "Target S/N",
-            min_value=1.0, max_value=1000.0, value=10.0, step=1.0,
-        )
+        target_snr_input = st.number_input("Target S/N", 1.0, 1000.0, 10.0, 1.0)
         exp_time = None
-
-    # --- S/N vs t plot range ---
+    
+    st.divider()
+    
+    # Plot range
+    t_start_log = st.slider("t_min (log₁₀ s)", 0.0, 3.0, 0.5, 0.1)
+    t_end_log = st.slider("t_max (log₁₀ s)", 1.0, 5.0, 3.6, 0.1)
+    
     st.markdown("---")
-    st.markdown("### Plot range")
-    t_start_log = st.slider("t_min  log₁₀(s)", 0.0, 3.0, 0.5, 0.1)
-    t_end_log   = st.slider("t_max  log₁₀(s)", 1.0, 5.0, 3.6, 0.1)
-
-    run_btn = st.button("▶  Calculate", type="primary", use_container_width=True)
+    run_btn = st.button("🚀 Compute Exposure Time", type="primary", use_container_width=True)
 
 # ---------------------------------------------------------------------------
-# Assemble parameter objects
+# Parameter Assembly
 # ---------------------------------------------------------------------------
-
-telescope  = TelescopeParams(diameter_m=diam, obstruction_fraction=obstruction)
+telescope = TelescopeParams(diameter_m=diam, obstruction_fraction=obstruction)
 conditions = ObservingConditions(
     seeing_fwhm_arcsec=seeing,
     aperture_radius_arcsec=ap_radius,
@@ -225,24 +309,19 @@ conditions = ObservingConditions(
 )
 
 # ---------------------------------------------------------------------------
-# Header
+# Header Summary
 # ---------------------------------------------------------------------------
-
-st.markdown("# Exposure Time Calculator")
-st.markdown(
-    f"**{mode} mode** · Filter **{filter_name}** · "
-    f"Telescope **{diam:.1f} m** · "
-    f"Object **{object_mag:.1f} AB mag**"
-)
-st.markdown("---")
+st.markdown(f"""
+**{mode} · {filter_name} · {diam:.1f}m · {object_mag:.1f} AB**
+""")
+st.divider()
 
 # ---------------------------------------------------------------------------
-# Run calculation
+# Main Computation & Results
 # ---------------------------------------------------------------------------
-
-if run_btn or True:   # compute on every interaction (Streamlit's default model)
+if run_btn:
     try:
-        if calc_mode == "S/N given exposure time":
+        if calc_mode == "S/N":
             result: ETCResult = compute_snr(
                 object_mag, exp_time, telescope, filt, det, conditions, src
             )
@@ -250,154 +329,153 @@ if run_btn or True:   # compute on every interaction (Streamlit's default model)
             result: ETCResult = compute_exposure_time(
                 object_mag, target_snr_input, telescope, filt, det, conditions, src
             )
-
         error_msg = None
     except ValueError as exc:
         error_msg = str(exc)
         result = None
+else:
+    result = None
+    error_msg = None
 
-    # -----------------------------------------------------------------------
-    # Display results
-    # -----------------------------------------------------------------------
+# Layout columns
+col_main, col_side = st.columns([3, 2], gap="large")
 
-    col_main, col_side = st.columns([3, 2], gap="large")
-
-    with col_main:
-
-        if error_msg:
-            st.error(f"⚠️  {error_msg}")
+with col_main:
+    if error_msg:
+        st.error(f"⚠️ {error_msg}")
+    elif result:
+        # Primary Results Card
+        regime_css = result.noise_regime.replace(" ", "-").lower().replace("/", "-")
+        regime_label = result.noise_regime
+        
+        if calc_mode == "S/N":
+            primary_label = "Signal-to-Noise Ratio"
+            primary_value = f"{result.snr:.1f}"
+            secondary = f"Exposure: {format_time(result.exposure_time_s)}"
         else:
-            # --- Primary result box ---
-            regime_css = result.noise_regime.replace(" ", "-").replace("/", "-")
-            regime_label = result.noise_regime
+            primary_label = "Required Exposure"
+            primary_value = format_time(result.time_for_target_snr)
+            secondary = f"S/N = {result.snr:.1f} (target: {result.target_snr:.0f})"
 
-            if calc_mode == "S/N given exposure time":
-                primary_label = "Signal-to-Noise Ratio"
-                primary_value = f"{result.snr:.2f}"
-                secondary = f"Exposure time: {format_time(result.exposure_time_s)}"
-            else:
-                primary_label = "Required Exposure Time"
-                primary_value = format_time(result.time_for_target_snr)
-                secondary = f"Achieved S/N = {result.snr:.2f}  (target: {result.target_snr:.1f})"
-
-            st.markdown(f"""
-<div class="result-box">
-  <div style="font-size:0.8rem;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;
-              font-family:'Space Mono',monospace;margin-bottom:6px;">{primary_label}</div>
-  <div class="snr-value">{primary_value}</div>
-  <div style="color:#94a3b8;margin-top:6px;font-size:0.9rem;">{secondary}</div>
-  <div style="margin-top:12px;">
-    <span class="regime-badge {regime_css}">{regime_label}</span>
-  </div>
-  <div class="info-row">
-    <div class="info-item">Signal <span>{result.signal_e:.1f} e⁻</span></div>
-    <div class="info-item">Sky noise <span>{result.sky_signal_e:.1f} e⁻</span></div>
-    <div class="info-item">Dark current <span>{result.dark_signal_e:.2f} e⁻</span></div>
-    <div class="info-item">RON² × n_pix <span>{result.read_noise_total_e2:.1f} e⁻²</span></div>
-    <div class="info-item">Aperture pixels <span>{result.n_pixels:.1f}</span></div>
-    <div class="info-item">Enclosed energy <span>{result.enclosed_energy*100:.1f} %</span></div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-            # --- Metrics row ---
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Coll. area", f"{telescope.collecting_area_m2:.3f} m²")
-            mc2.metric("QE", f"{det.quantum_efficiency*100:.0f} %")
-            mc3.metric("Read noise", f"{det.read_noise_e} e⁻/pix")
-            mc4.metric("Dark current", f"{det.dark_current_e_s} e⁻/s/pix")
-
-        # --- S/N vs time plot ---
-        st.markdown("### S/N vs. Exposure Time")
-
+        st.markdown(f"""
+        <div class="result-box">
+            <div style="font-size: 0.85rem; color: var(--text-secondary); 
+                       letter-spacing: 0.1em; text-transform: uppercase;
+                       font-family: 'Space Mono', monospace; margin-bottom: 0.5rem;">
+                {primary_label}
+            </div>
+            <div class="snr-value">{primary_value}</div>
+            <div style="color: var(--text-secondary); margin: 0.75rem 0 1rem 0; font-size: 1rem;">
+                {secondary}
+            </div>
+            <div style="margin-bottom: 1.25rem;">
+                <span class="regime-badge {regime_css}">{regime_label}</span>
+            </div>
+            <div class="info-row">
+                <div class="info-item">Signal <span>{result.signal_e:.0f} e⁻</span></div>
+                <div class="info-item">Sky <span>{result.sky_signal_e:.0f} e⁻</span></div>
+                <div class="info-item">Dark <span>{result.dark_signal_e:.2f} e⁻</span></div>
+                <div class="info-item">Read Noise <span>{result.read_noise_total_e2:.0f} e⁻²</span></div>
+                <div class="info-item">Pixels <span>{result.n_pixels:.0f}</span></div>
+                <div class="info-item">EE <span>{result.enclosed_energy*100:.1f}%</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Key Metrics
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("Area", f"{telescope.collecting_area_m2:.2f} m²")
+        mc2.metric("QE", f"{det.quantum_efficiency*100:.0f}%")
+        mc3.metric("Read Noise", f"{det.read_noise_e:.1f} e⁻")
+        mc4.metric("Dark Current", f"{det.dark_current_e_s:.3f} e⁻/s")
+        
+        # S/N vs Time Plot
+        st.markdown("### S/N vs Exposure Time")
         t_arr, snr_arr = snr_vs_time(
             object_mag, telescope, filt, det, conditions, src,
             t_start=10**t_start_log, t_end=10**t_end_log,
         )
-
-        fig, ax = plt.subplots(figsize=(8, 4))
-        fig.patch.set_facecolor("#0a0e17")
-        ax.set_facecolor("#0f1623")
-
-        ax.plot(t_arr, snr_arr, color="#60a5fa", lw=2.2, label="S/N")
-
-        # Overplot current operating point
-        if result and not error_msg:
-            t_op  = result.time_for_target_snr if result.time_for_target_snr else result.exposure_time_s
+        
+        fig, ax = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor(colors['bg_primary'])
+        ax.set_facecolor(colors['bg_secondary'])
+        
+        ax.plot(t_arr, snr_arr, color=colors['accent_primary'], lw=2.5, label="S/N")
+        
+        if result:
+            t_op = result.time_for_target_snr if result.time_for_target_snr else result.exposure_time_s
             snr_op = result.snr
-            ax.axvline(t_op, color="#f472b6", lw=1.2, ls="--", alpha=0.8)
-            ax.axhline(snr_op, color="#f472b6", lw=1.2, ls="--", alpha=0.8)
-            ax.scatter([t_op], [snr_op], color="#f472b6", s=80, zorder=5,
-                       label=f"Operating point ({format_time(t_op)}, S/N={snr_op:.1f})")
-
-        if target_snr_input and calc_mode == "Exposure time given S/N":
-            ax.axhline(target_snr_input, color="#fbbf24", lw=1.0, ls=":",
-                       alpha=0.7, label=f"Target S/N = {target_snr_input:.0f}")
-
+            ax.axvline(t_op, color="#f472b6", lw=2, ls="--", alpha=0.8, label="Operating Point")
+            ax.axhline(snr_op, color="#f472b6", lw=2, ls="--", alpha=0.8)
+            ax.scatter([t_op], [snr_op], color="#f472b6", s=100, zorder=5, edgecolors='white', linewidth=1)
+        
+        if target_snr_input:
+            ax.axhline(target_snr_input, color=colors['warning'], lw=2, ls=":", alpha=0.8, label=f"Target S/N")
+        
         ax.set_xscale("log")
-        ax.set_xlabel("Exposure time (s)", color="#94a3b8", fontsize=11)
-        ax.set_ylabel("S/N", color="#94a3b8", fontsize=11)
-        ax.tick_params(colors="#64748b")
+        ax.set_xlabel("Exposure Time (s)", color=colors['text_secondary'], fontsize=12)
+        ax.set_ylabel("Signal-to-Noise Ratio", color=colors['text_secondary'], fontsize=12)
+        ax.tick_params(colors=colors['text_muted'])
         for spine in ax.spines.values():
-            spine.set_color("#1e293b")
-        ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
-        ax.xaxis.set_minor_formatter(mticker.NullFormatter())
-        ax.grid(True, color="#1e293b", linewidth=0.6, which="both")
-        legend = ax.legend(framealpha=0.0, labelcolor="#94a3b8", fontsize=9)
+            spine.set_color(colors['border'])
+        ax.grid(True, color=colors['border'], linewidth=0.8, alpha=0.3)
+        ax.legend(framealpha=0.9, facecolor=colors['bg_tertiary'], edgecolor=colors['border'], fontsize=10)
         ax.set_title(
-            f"mag={object_mag:.1f} AB · {filt.name}-band · Ø{diam:.1f} m",
-            color="#64748b", fontsize=9, pad=8
+            f"{object_mag:.1f} AB · {filt.name} · {diam:.1f}m",
+            color=colors['text_muted'], fontsize=12, pad=15
         )
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
-    # -----------------------------------------------------------------------
-    # Side column — detector & filter info
-    # -----------------------------------------------------------------------
-    with col_side:
-        st.markdown("### Detector Parameters")
-        st.markdown(f"""
-| Parameter | Value |
-|-----------|-------|
-| Read noise | {det.read_noise_e} e⁻/pix |
-| Dark current | {det.dark_current_e_s} e⁻/s/pix |
-| Pixel scale | {det.pixel_scale_arcsec} arcsec/pix |
-| Quantum efficiency | {det.quantum_efficiency*100:.0f} % |
-""")
-        st.markdown("### Filter Parameters")
-        st.markdown(f"""
-| Parameter | Value |
-|-----------|-------|
-| Band | {filt.name} |
-| λ_eff | {filt.lambda_eff_angstrom:.0f} Å |
-| Δλ | {filt.delta_lambda_angstrom:.0f} Å |
-| Sky brightness | {filt.sky_mag_arcsec2:.1f} mag/arcsec² |
-| Mode | {filt.mode} |
-""")
-        st.markdown("### Physical Model")
-        st.latex(r"""
-\frac{S}{N} = \frac{S}{\sqrt{S + N_\mathrm{sky} + N_\mathrm{dark} + \sigma_\mathrm{RON}^2 \cdot n_\mathrm{pix} \cdot n_\mathrm{reads}}}
-""")
+with col_side:
+    st.markdown("### Detector")
+    st.markdown(f"""
+    | Parameter | Value |
+    |-----------|-------|
+    | Read Noise | {det.read_noise_e:.1f} e⁻/pix |
+    | Dark Current | {det.dark_current_e_s:.3f} e⁻/s/pix |
+    | Pixel Scale | {det.pixel_scale_arcsec:.2f}″/pix |
+    | Quantum Eff. | {det.quantum_efficiency*100:.0f}% |
+    """)
+    
+    st.markdown("### Filter")
+    st.markdown(f"""
+    | Parameter | Value |
+    |-----------|-------|
+    | Band | {filt.name} |
+    | λ<sub>eff</sub> | {filt.lambda_eff_angstrom:.0f} Å |
+    | Δλ | {filt.delta_lambda_angstrom:.0f} Å |
+    | Sky | {filt.sky_mag_arcsec2:.1f} mag/″² |
+    | Mode | {filt.mode} |
+    """)
+    
+    st.markdown("### Model")
+    st.latex(r"""
+    $$ \frac{S}{N} = \frac{S}{\sqrt{S + n_\mathrm{sky} + n_\mathrm{dark} + \sigma^2_\mathrm{RON} \cdot n_\mathrm{pix} \cdot n_\mathrm{reads}}} $$
+    """)
+    
+    with st.expander("Noise Regimes", expanded=False):
         st.markdown("""
-**Terms:**
-- **S** = object signal [e⁻]
-- **N_sky** = sky background [e⁻]  
-- **N_dark** = dark current [e⁻]  
-- **σ_RON² · n_pix** = read-noise variance [e⁻²]
+        - **🟢 Sky-limited** — Sky background dominates  
+        - **🟣 Read-noise-limited** — Short exposures
+        - **🟡 Shot-noise-limited** — Bright sources  
+        - **🔴 Dark-limited** — Very long exposures
+        """)
+    
+    st.markdown("### Assumptions")
+    st.caption("""
+    - Gaussian PSF (Moffat more realistic)  
+    - No airmass extinction
+    - Single filter/epoch
+    - Fixed sky brightness
+    - Flat QE in bandpass
+    """)
 
-**Noise regimes:**
-- 🔵 **Sky-limited** — sky dominates (most observations)
-- 🟣 **Read-noise-limited** — short exposures / faint sky
-- 🟢 **Shot-noise-limited** — bright sources
-- 🟠 **Dark-limited** — long exposures, low sky
-""")
-
-        st.markdown("### Assumptions & Limitations")
-        st.caption("""
-- Gaussian PSF; real PSFs include wings (Moffat profile)
-- No atmospheric dispersion or extinction
-- Single-filter, single-epoch model
-- Sky surface brightness is fixed (no moon-phase correction)
-- Flat detector response within the filter bandpass
-""")
+# Footer
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: var(--text-muted); font-size: 0.8rem;'>"
+    "Astronomical Exposure Time Calculator | Professional Astronomy Tools</div>", 
+    unsafe_allow_html=True
+)
