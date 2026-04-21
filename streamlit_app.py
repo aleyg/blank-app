@@ -1045,18 +1045,29 @@ with tab_budget:
             hovertemplate="%{label}<br>%{value:.1f}% de la varianza<extra></extra>",
         ))
         fig_pie.update_layout(
-            **PLOT_LAYOUT_BASE,
+            template="plotly_dark" if theme == "dark" else "plotly_white",
+            paper_bgcolor=T["plot_paper"],
+            plot_bgcolor=T["plot_bg"],
+            font=dict(family="DM Sans, sans-serif", size=12, color=T["plot_axis"]),
             height=380,
             margin=dict(l=16, r=16, t=50, b=20),
             showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="middle", y=0.5,
+                xanchor="left",   x=1.02,
+                bgcolor="rgba(0,0,0,0)",
+                font=dict(size=11),
+            ),
             title=dict(
                 text="Contribuciones al ruido",
                 font=dict(size=14, color=T["plot_axis"]), x=0.01, y=0.97, xanchor="left",
             ),
             annotations=[dict(
                 text=f"<b>S/N</b><br>{result.snr:.1f}",
-                x=0.5, y=0.5, font_size=16, showarrow=False,
-                font=dict(color=T["plot_axis"], family="DM Serif Display, serif"),
+                x=0.5, y=0.5, font=dict(size=16, color=T["plot_axis"],
+                                         family="DM Serif Display, serif"),
+                showarrow=False,
             )],
         )
 
