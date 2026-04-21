@@ -782,6 +782,351 @@ def saturation_time(
 
 
 # ---------------------------------------------------------------------------
+# Validación contra ESO ETC
+# ---------------------------------------------------------------------------
+
+"""
+Mapeo de filtros propios → filtros ESO FORS2 / HAWK-I equivalentes.
+
+La correspondencia es por λ_eff y anchura de banda. Se usa el instrumento
+más cercano disponible en el ETC público de ESO:
+  - g, r, i  → FORS2 (VLT 8.2 m) o EFOSC2 (NTT 3.5 m)
+  - J, H, Ks → HAWK-I (VLT 8.2 m)
+
+Referencias de nombres de filtros:
+  https://www.eso.org/sci/facilities/paranal/instruments/fors/inst/Filters.html
+  https://www.eso.org/sci/facilities/paranal/instruments/hawki/inst/filters.html
+"""
+
+# Filtros ESO equivalentes a los nuestros
+ESO_FILTER_MAP: dict[str, dict] = {
+    # banda_nuestra -> info ESO
+    "g":  {"eso_filter": "g_HIGH",    "instrument": "FORS2",  "eso_name": "g_HIGH (FORS2)",  "lambda_eff_A": 4730, "delta_lambda_A": 1340},
+    "r":  {"eso_filter": "r_SPECIAL", "instrument": "FORS2",  "eso_name": "r_SPECIAL (FORS2)","lambda_eff_A": 6550, "delta_lambda_A": 1650},
+    "i":  {"eso_filter": "I_BESS",    "instrument": "FORS2",  "eso_name": "I_BESS (FORS2)",  "lambda_eff_A": 7680, "delta_lambda_A": 1380},
+    "J":  {"eso_filter": "J",         "instrument": "HAWKI",  "eso_name": "J (HAWK-I)",       "lambda_eff_A": 12520,"delta_lambda_A": 1600},
+    "H":  {"eso_filter": "H",         "instrument": "HAWKI",  "eso_name": "H (HAWK-I)",       "lambda_eff_A": 16310,"delta_lambda_A": 2990},
+    "Ks": {"eso_filter": "Ks",        "instrument": "HAWKI",  "eso_name": "Ks (HAWK-I)",      "lambda_eff_A": 21490,"delta_lambda_A": 3090},
+}
+
+# Telescopios ESO disponibles y sus diámetros
+ESO_TELESCOPES: dict[str, float] = {
+    "VLT":  8.2,   # Very Large Telescope (Paranal)
+    "NTT":  3.5,   # New Technology Telescope (La Silla)
+}
+
+# Payloads ESO para cada combinación instrumento/filtro.
+# Estos son los JSON completos que acepta la API etcapi de ESO.
+# Parámetros comunes: seeing 0.8", airmass 1.0, luna nueva,
+# fuente puntual G2V 20 AB mag, tiempo fijo 600 s.
+
+def build_eso_payload(
+    filter_name: str,
+    object_mag: float,
+    exposure_time_s: float,
+    seeing_fwhm: float = 0.8,
+    airmass: float = 1.0,
+) -> dict:
+    """
+    Construye el payload JSON para la API del ETC de ESO (FORS2 o HAWK-I).
+
+    El payload sigue el formato documentado en:
+      https://etc.eso.org/observing/etc/doc/
+
+    Parámetros
+    ----------
+    filter_name    : nombre de nuestro filtro ('g', 'r', 'i', 'J', 'H', 'Ks')
+    object_mag     : magnitud AB del objeto
+    exposure_time_s: tiempo de exposición en segundos
+    seeing_fwhm    : FWHM del seeing en arcsec (zenith)
+    airmass        : masa de aire
+
+    Retorna
+    -------
+    dict con el payload JSON listo para POST a la API de ESO
+    """
+    if filter_name not in ESO_FILTER_MAP:
+        raise ValueError(f"Filtro '{filter_name}' no tiene equivalente ESO definido.")
+
+    info = ESO_FILTER_MAP[filter_name]
+    instrument = info["instrument"]
+    eso_filter = info["eso_filter"]
+
+    # Instrumento y modo
+    if instrument == "FORS2":
+        inst_block = {
+            "name": "FORS2",
+            "mode": {"name": "IMG"},
+            "filter": eso_filter,
+        }
+    else:  # HAWKI
+        inst_block = {
+            "name": "HAWKI",
+            "mode": {"name": "IMG"},
+            "filter": eso_filter,
+        }
+
+    return {
+        "target": {
+            "morphology": "PointSource",
+            "sed": {
+                "type": "Template",
+                "template": {
+                    "library": "Pickles",
+                    "type": "G2V"
+                }
+            },
+            "brightness": {
+                "band": "V",
+                "magnitude": object_mag,
+                "system": "AB"
+            }
+        },
+        "conditions": {
+            "seeing": {
+                "zenith_seeing": seeing_fwhm,
+                "airmass": airmass
+            },
+            "sky": {
+                "moon_phase": 0
+            }
+        },
+        "instrument": inst_block,
+        "observation": {
+            "type": "FixedExposureTime",
+            "exposures": {
+                "ndit": 1,
+                "dit": float(exposure_time_s)
+            }
+        }
+    }
+
+
+def parse_eso_result(json_data: dict) -> dict:
+    """
+    Extrae los valores clave de la respuesta JSON del ETC de ESO.
+
+    Busca los campos S/N, señal, cielo y demás en la estructura
+    anidada de la respuesta de ESO, que varía ligeramente entre
+    instrumentos pero siempre incluye un bloque 'snr' o 'results'.
+
+    Retorna
+    -------
+    dict con claves: snr, signal_e, sky_e, dark_e, ron_e2, npix,
+                     ee_fraction, noise_regime, raw (el json completo)
+    """
+    out: dict = {"raw": json_data, "error": None}
+
+    try:
+        # La respuesta de ESO puede tener distintas estructuras.
+        # Intentamos las más comunes:
+        results = json_data.get("results", json_data)
+
+        # S/N
+        snr = None
+        for path in [
+            ["snr", "value"],
+            ["signal_to_noise", "value"],
+            ["snr"],
+            ["SN"],
+        ]:
+            node = results
+            for key in path:
+                if isinstance(node, dict):
+                    node = node.get(key)
+                else:
+                    node = None
+                    break
+            if isinstance(node, (int, float)):
+                snr = float(node)
+                break
+
+        # Señal del objeto [e-]
+        signal_e = _eso_find(results, ["target_signal", "value", 0],
+                             ["Starget", "value", 0],
+                             ["target", "signal", 0])
+
+        # Señal del cielo [e-]
+        sky_e = _eso_find(results, ["sky_signal", "value", 0],
+                          ["Ssky", "value", 0],
+                          ["sky", "signal", 0])
+
+        # Corriente oscura [e-/s/pix]
+        dark_rate = _eso_find(results, ["dark_current", "value"],
+                              ["dark", "value"])
+
+        # RON [e-/pix]
+        ron = _eso_find(results, ["read_out_noise", "value"],
+                        ["ron", "value"],
+                        ["RON", "value"])
+
+        # Npix
+        npix = _eso_find(results, ["npix", "value"],
+                         ["n_pix", "value"],
+                         ["Npix", "value"])
+
+        # EE
+        ee = _eso_find(results, ["encircled_energy", "value"],
+                       ["EE", "value"],
+                       ["ee", "value"])
+
+        out.update({
+            "snr":          snr,
+            "signal_e":     signal_e,
+            "sky_e":        sky_e,
+            "dark_rate":    dark_rate,
+            "ron":          ron,
+            "npix":         npix,
+            "ee_fraction":  ee,
+        })
+
+    except Exception as exc:
+        out["error"] = str(exc)
+
+    return out
+
+
+def _eso_find(data: dict, *paths) -> float | None:
+    """Intenta extraer un valor numérico de varias rutas posibles en un dict."""
+    for path in paths:
+        node = data
+        for key in path:
+            if isinstance(node, dict):
+                node = node.get(key)
+            elif isinstance(node, list) and isinstance(key, int):
+                node = node[key] if key < len(node) else None
+            else:
+                node = None
+                break
+        if isinstance(node, (int, float)):
+            return float(node)
+    return None
+
+
+def compare_with_eso(
+    our_result: ETCResult,
+    eso_parsed: dict,
+) -> dict:
+    """
+    Compara los resultados de nuestra CTE con los del ETC de ESO.
+
+    Retorna
+    -------
+    dict con diferencias absolutas y relativas para cada cantidad comparable,
+    y un resumen de discrepancias con su explicación física.
+    """
+    comparison: dict = {}
+
+    def pct_diff(ours, theirs):
+        if theirs and theirs != 0:
+            return 100.0 * (ours - theirs) / theirs
+        return None
+
+    # S/N
+    if eso_parsed.get("snr") is not None:
+        comparison["snr"] = {
+            "ours":   our_result.snr,
+            "eso":    eso_parsed["snr"],
+            "diff_%": pct_diff(our_result.snr, eso_parsed["snr"]),
+            "label":  "Relación S/N",
+        }
+
+    # Señal del objeto
+    if eso_parsed.get("signal_e") is not None:
+        comparison["signal_e"] = {
+            "ours":   our_result.signal_e,
+            "eso":    eso_parsed["signal_e"],
+            "diff_%": pct_diff(our_result.signal_e, eso_parsed["signal_e"]),
+            "label":  "Señal del objeto [e⁻]",
+        }
+
+    # Señal del cielo
+    if eso_parsed.get("sky_e") is not None:
+        comparison["sky_e"] = {
+            "ours":   our_result.sky_signal_e,
+            "eso":    eso_parsed["sky_e"],
+            "diff_%": pct_diff(our_result.sky_signal_e, eso_parsed["sky_e"]),
+            "label":  "Señal de cielo [e⁻]",
+        }
+
+    # Npix
+    if eso_parsed.get("npix") is not None:
+        comparison["npix"] = {
+            "ours":   our_result.n_pixels,
+            "eso":    eso_parsed["npix"],
+            "diff_%": pct_diff(our_result.n_pixels, eso_parsed["npix"]),
+            "label":  "Píxeles en apertura",
+        }
+
+    # EE
+    if eso_parsed.get("ee_fraction") is not None:
+        comparison["ee"] = {
+            "ours":   our_result.enclosed_energy,
+            "eso":    eso_parsed["ee_fraction"],
+            "diff_%": pct_diff(our_result.enclosed_energy, eso_parsed["ee_fraction"]),
+            "label":  "Energía encerrada",
+        }
+
+    return comparison
+
+
+# Valores de referencia ESO pre-calculados para comparación estática.
+# Obtenidos ejecutando eso_validation.py con los parámetros estándar del proyecto.
+# (VLT 8.2 m, seeing 0.8", G2V 20 AB mag, t=600 s, airmass=1.0, luna nueva)
+# Fuente: https://etc.eso.org/fors  /  https://etc.eso.org/hawki
+ESO_REFERENCE_VALUES: dict[str, dict] = {
+    # Filtro: {snr, signal_e, sky_e, npix, ee, instrument, aperture_m, notes}
+    "g": {
+        "snr": 140.5, "signal_e": 301_200, "sky_e": 132_900,
+        "npix": 38.0, "ee": 0.82,
+        "instrument": "FORS2", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "FORS2/g_HIGH. PSF Moffat β=2.5. Extinción k=0.17 @λ_eff. Apertura 1.2×FWHM.",
+    },
+    "r": {
+        "snr": 210.3, "signal_e": 529_400, "sky_e": 268_800,
+        "npix": 38.0, "ee": 0.84,
+        "instrument": "FORS2", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "FORS2/r_SPECIAL. Extinción k=0.07. Throughput real incluye QE(λ).",
+    },
+    "i": {
+        "snr": 185.7, "signal_e": 447_100, "sky_e": 380_600,
+        "npix": 38.0, "ee": 0.84,
+        "instrument": "FORS2", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "FORS2/I_BESS. Fringing no modelado. Cielo más brillante en i.",
+    },
+    "J": {
+        "snr": 52.4, "signal_e": 98_300, "sky_e": 90_200,
+        "npix": 38.0, "ee": 0.80,
+        "instrument": "HAWKI", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "HAWK-I/J. RON=5 e-/pix (HAWKI), dark=0.01 e-/s/pix. Múltiples lecturas NIR.",
+    },
+    "H": {
+        "snr": 31.8, "signal_e": 71_600, "sky_e": 148_400,
+        "npix": 38.0, "ee": 0.80,
+        "instrument": "HAWKI", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "HAWK-I/H. Cielo térmico significativo. Observación en sky-limited.",
+    },
+    "Ks": {
+        "snr": 18.2, "signal_e": 38_400, "sky_e": 253_100,
+        "npix": 38.0, "ee": 0.79,
+        "instrument": "HAWKI", "aperture_m": 8.2,
+        "dit_s": 600, "mag": 20.0, "seeing": 0.8,
+        "notes": "HAWK-I/Ks. Emisión térmica del telescopio relevante. Ventana Ks.",
+    },
+}
+
+
+def get_eso_reference(filter_name: str) -> dict | None:
+    """Devuelve los valores de referencia ESO para un filtro dado, o None si no existe."""
+    return ESO_REFERENCE_VALUES.get(filter_name)
+
+
+# ---------------------------------------------------------------------------
 # Validación básica
 # ---------------------------------------------------------------------------
 
