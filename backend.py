@@ -9,19 +9,19 @@ Modelo Físico
 -------------
 La relación señal-ruido (S/N) se define como:
 
-    S/N = S / sqrt(S + N_sky + N_dark + σ_RON² · n_pix · n_reads)
+    S/N = S / sqrt(S + N_sky + N_dark + _RON2 · n_pix · n_reads)
 
 donde:
     S        = señal del objeto                          [e⁻]
     N_sky    = señal del fondo de cielo                  [e⁻]
     N_dark   = señal de corriente oscura                 [e⁻]
-    σ_RON²   = varianza del ruido de lectura por píxel  [e⁻²]
+    _RON2   = varianza del ruido de lectura por píxel  [e⁻2]
     n_pix    = número de píxeles en la apertura
     n_reads  = número de lecturas del detector
 
 Cadena de conversión:
-    mag_AB  →  F_ν [W/m²/Hz]  →  F_λ [W/m²/m]  →  flujo de banda [W/m²]
-            →  flujo de fotones [ph/s/m²]  →  señal del detector [e⁻]
+    mag_AB  →  F_v [W/m2/Hz]  →  F_λ [W/m2/m]  →  flujo de banda [W/m2]
+            →  flujo de fotones [ph/s/m2]  →  señal del detector [e⁻]
 
 Referencias:
     - ESO FORS ETC white-paper (https://etc.eso.org/fors)
@@ -42,7 +42,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 H_PLANCK: float = 6.62607015e-34   # J·s   (CODATA 2018)
 C_LIGHT: float  = 2.99792458e8     # m/s   (exacto)
-AB_F0: float    = 3.630780548e-23  # W/m²/Hz  (flujo cero AB, Oke & Gunn 1983)
+AB_F0: float    = 3.630780548e-23  # W/m2/Hz  (flujo cero AB, Oke & Gunn 1983)
 
 # ---------------------------------------------------------------------------
 # Data classes (contenedores de parámetros)
@@ -56,9 +56,9 @@ class TelescopeParams:
 
     @property
     def collecting_area_m2(self) -> float:
-        """Área efectiva de recolección [m²].
+        """Área efectiva de recolección [m2].
 
-        A = π · (r_outer² − r_inner²)
+        A = π · (r_outer2 − r_inner2)
         donde r_inner = obstruction_fraction · r_outer
         """
         r_outer = self.diameter_m / 2.0
@@ -72,7 +72,7 @@ class FilterParams:
     name: str
     lambda_eff_angstrom: float    # longitud de onda efectiva [Å]
     delta_lambda_angstrom: float  # anchura de banda [Å]
-    sky_mag_arcsec2: float        # brillo superficial del cielo [AB mag/arcsec²]
+    sky_mag_arcsec2: float        # brillo superficial del cielo [AB mag/arcsec2]
     mode: Literal["optical", "nir"] = "optical"
     # Coeficiente de extinción atmosférica [mag/airmass]
     extinction_coeff: float = 0.0
@@ -163,25 +163,25 @@ def mag_ab_to_photon_flux(
     delta_lambda_m: float,
 ) -> float:
     """
-    Convierte magnitud AB a flujo de fotones integrado en la banda [ph/s/m²].
+    Convierte magnitud AB a flujo de fotones integrado en la banda [ph/s/m2].
 
     Derivación paso a paso
     ----------------------
     1. Magnitud AB → densidad espectral de flujo:
-           F_ν = F₀_AB · 10^(−mag_AB / 2.5)          [W/m²/Hz]
-       donde F₀_AB = 3.631 × 10⁻²³ W/m²/Hz
+           F_v = F₀_AB · 10^(−mag_AB / 2.5)          [W/m2/Hz]
+       donde F₀_AB = 3.631 × 10⁻2³ W/m2/Hz
 
-    2. Conversión F_ν → F_λ  (por invariancia de energía):
-           F_λ = F_ν · c / λ²                         [W/m²/m]
+    2. Conversión F_v → F_λ  (por invariancia de energía):
+           F_λ = F_v · c / λ2                         [W/m2/m]
 
     3. Integración en la banda (aproximación de banda plana):
-           F_band = F_λ · Δλ                           [W/m²]
+           F_band = F_λ · Δλ                           [W/m2]
 
     4. Energía por fotón a λ_eff:
            E_ph = h·c / λ_eff                          [J]
 
     5. Flujo de fotones:
-           Φ = F_band / E_ph                           [ph/s/m²]
+           Φ = F_band / E_ph                           [ph/s/m2]
     """
     f_nu: float = AB_F0 * 10.0 ** (-mag_ab / 2.5)
     f_lambda: float = f_nu * C_LIGHT / lambda_eff_m ** 2
@@ -202,11 +202,11 @@ def enclosed_energy_fraction(
     Soporta dos modelos de PSF:
 
     1. Gaussiana:
-        EE(r) = 1 − exp(−r² / 2σ²),  σ = FWHM / (2√(2 ln 2))
+        EE(r) = 1 − exp(−r2 / 22),   = FWHM / (2√(2 ln 2))
 
     2. Moffat (modelo ESO, β = 2.5 por defecto):
-        I(r) ∝ [1 + (r/α)²]^(−β)
-        EE(r) = 1 − [1 + (r/α)²]^(1−β)
+        I(r) ∝ [1 + (r/α)2]^(−β)
+        EE(r) = 1 − [1 + (r/α)2]^(1−β)
         α = FWHM / (2 · √(2^(1/β) − 1))
 
     El perfil de Moffat reproduce mejor las alas extendidas de las PSFs
@@ -233,7 +233,7 @@ def aperture_n_pixels(
     """
     Número de píxeles dentro de una apertura circular de radio dado.
 
-        n_pix = π · (r_ap / plate_scale)²
+        n_pix = π · (r_ap / plate_scale)2
     """
     r_pix: float = aperture_radius_arcsec / pixel_scale_arcsec
     return math.pi * r_pix ** 2
@@ -400,7 +400,7 @@ def compute_snr(
     # ── Corriente oscura [e⁻] ─────────────────────────────────────────────
     dark_signal_e: float = detector.dark_current_e_s * n_pix * t
 
-    # ── Varianza del ruido de lectura [e⁻²] ──────────────────────────────
+    # ── Varianza del ruido de lectura [e⁻2] ──────────────────────────────
     read_noise_var: float = (
         detector.read_noise_e ** 2 * n_pix * conditions.n_reads
     )
@@ -606,7 +606,7 @@ def detector_for_filter(f: FilterParams) -> DetectorParams:
 def default_aperture_radius(seeing_fwhm_arcsec: float) -> float:
     """
     Radio de apertura por defecto: r_ap = 1.5 × FWHM.
-    Calibrado para coincidir con la apertura ESO ETC (Ω = 2.41 arcsec²  ≈ r=0.876" para 0.8" seeing).
+    Calibrado para coincidir con la apertura ESO ETC (Ω = 2.41 arcsec2  ≈ r=0.876" para 0.8" seeing).
     El ETC de ESO usa típicamente ~2× FWHM para el diámetro → r ≈ FWHM.
     """
     return seeing_fwhm_arcsec
@@ -734,8 +734,8 @@ if __name__ == "__main__":
     r = compute_snr(20.0, 600.0, tel, filt, det, cond)
     print(f"S/N = {r.snr:.2f}  |  Régimen: {r.noise_regime}")
     print(f"Señal: {r.signal_e:.0f} e⁻  |  Cielo: {r.sky_signal_e:.0f} e⁻")
-    print(f"RON²×npix: {r.read_noise_total_e2:.0f} e⁻²  |  n_pix: {r.n_pixels:.1f}")
-    print(f"EE: {r.enclosed_energy*100:.1f}%  |  Área: {tel.collecting_area_m2:.3f} m²")
+    print(f"RON2×npix: {r.read_noise_total_e2:.0f} e⁻2  |  n_pix: {r.n_pixels:.1f}")
+    print(f"EE: {r.enclosed_energy*100:.1f}%  |  Área: {tel.collecting_area_m2:.3f} m2")
 
     r2 = compute_exposure_time(20.0, 10.0, tel, filt, det, cond)
     print(f"\nPara S/N=10: t = {format_time(r2.time_for_target_snr)}")
