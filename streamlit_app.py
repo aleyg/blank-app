@@ -1079,7 +1079,7 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"""
 \frac{S}{N} =
 \frac{S}{
@@ -1096,7 +1096,7 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"m_\mathrm{ext} = m_\mathrm{AB} + k_\lambda \cdot X \quad \text{(extinción)}")
         st.latex(r"F_\nu = F_0^\mathrm{AB} \cdot 10^{-m_\mathrm{ext}/2.5} \quad [W\,m^{-2}\,Hz^{-1}]")
         st.latex(r"\Phi = \frac{F_\nu \cdot c \cdot \Delta\lambda}{\lambda_\mathrm{eff}^2} \cdot \frac{\lambda_\mathrm{eff}}{hc} \quad [\mathrm{ph\,s^{-1}\,m^{-2}}]")
@@ -1110,7 +1110,7 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"A_\mathrm{eff} = \frac{\pi D^2}{4}(1-\epsilon^2) \quad D=8.2\,\mathrm{m},\;\epsilon=0.14")
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1127,7 +1127,6 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
         st.latex(r"I(r) \propto \left[1 + \left(\frac{r}{\alpha}\right)^2\right]^{-\beta}")
         st.latex(r"\mathrm{EE}(r) = 1 - \left[1 + \left(\frac{r}{\alpha}\right)^2\right]^{1-\beta}")
         st.latex(r"\alpha = \frac{\mathrm{FWHM}}{2\sqrt{2^{1/\beta}-1}}, \quad \beta=2.5")
@@ -1140,7 +1139,7 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        
         st.latex(r"m_\mathrm{ext} = m_0 + k_\lambda \cdot X")
         st.latex(r"k_g=0.17,\; k_r=0.07,\; k_i=0.03 \quad [\mathrm{mag/airmass}]")
         st.markdown("</div>", unsafe_allow_html=True)
