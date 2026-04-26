@@ -10,17 +10,17 @@ Este módulo se encarga exclusivamente de:
   - Mostrar resultados, gráficas y diagnósticos
 
 Toda la física vive en backend.py.
+Telescopio fijo: VLT 8.2 m — para comparación directa con el ETC de ESO.
 """
 
 import math
-import json
 import streamlit as st
 import plotly.graph_objects as go
 
 from backend import (
     NIR_FILTERS,
     OPTICAL_FILTERS,
-    TELESCOPE_APERTURES,
+    TELESCOPE_DIAMETER_M,
     ETCResult,
     ObservingConditions,
     TelescopeParams,
@@ -34,26 +34,6 @@ from backend import (
     snr_vs_magnitude,
     snr_vs_time,
 )
-
-# ESO validation functions — requieren backend.py actualizado
-try:
-    from backend import (
-        ESO_FILTER_MAP,
-        ESO_REFERENCE_VALUES,
-        build_eso_payload,
-        compare_with_eso,
-        get_eso_reference,
-        parse_eso_result,
-    )
-    _ESO_AVAILABLE = True
-except ImportError:
-    _ESO_AVAILABLE = False
-    ESO_FILTER_MAP       = {}
-    ESO_REFERENCE_VALUES = {}
-    def build_eso_payload(*a, **kw): return {}
-    def compare_with_eso(*a, **kw): return {}
-    def get_eso_reference(*a, **kw): return None
-    def parse_eso_result(*a, **kw): return {}
 
 # ---------------------------------------------------------------------------
 # Configuración general
@@ -218,7 +198,6 @@ body {{ color: var(--text); }}
   color: var(--text);
 }}
 
-/* ── Sidebar ── */
 section[data-testid="stSidebar"] {{
   background: var(--sidebar) !important;
   border-right: 1px solid var(--border) !important;
@@ -226,7 +205,6 @@ section[data-testid="stSidebar"] {{
 section[data-testid="stSidebar"] .block-container {{
   padding-top: 1rem;
 }}
-/* Etiquetas en sidebar */
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
@@ -235,7 +213,6 @@ section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
   color: var(--text-muted) !important;
 }}
-/* Inputs en sidebar */
 section[data-testid="stSidebar"] .stSelectbox > div > div,
 section[data-testid="stSidebar"] .stNumberInput input {{
   background: var(--surface-2) !important;
@@ -243,7 +220,6 @@ section[data-testid="stSidebar"] .stNumberInput input {{
   color: var(--text) !important;
 }}
 
-/* ── Tipografía ── */
 h1, h2, h3 {{
   font-family: 'Source Serif 4', serif !important;
   color: var(--text);
@@ -257,7 +233,6 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
   color: var(--text-muted) !important;
 }}
 
-/* ── Métricas ── */
 [data-testid="metric-container"] {{
   background: var(--metric-bg);
   border: 1px solid var(--metric-border);
@@ -271,7 +246,6 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
   letter-spacing: 0.06em;
 }}
 
-/* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {{
   background: var(--surface-2) !important;
   border-radius: 12px !important;
@@ -292,13 +266,11 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
 }}
 .stTabs [data-baseweb="tab-panel"] {{ padding-top: 1rem !important; }}
 
-/* ── Botones ── */
 .stButton > button {{
   border-radius: 999px !important;
   font-weight: 600 !important;
 }}
 
-/* ── Componentes propios ── */
 .topbar {{
   position: sticky;
   top: 0;
@@ -426,7 +398,6 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
   border-bottom: 1px solid var(--border);
 }}
 .table-clean th {{ color: var(--text-soft); font-weight: 600; }}
-/* Caja ecuación — solo para contenido HTML puro, NO mezclar con st.latex */
 .eq-wrap {{
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -440,11 +411,18 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
   line-height: 1.65;
   margin-top: 0.75rem;
 }}
-/* Separador sidebar */
-.sidebar-sep {{
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 0.6rem 0;
+.eso-info-badge {{
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.7rem;
+  margin-bottom: 0.4rem;
 }}
 @media (max-width: 900px) {{
   .topbar-title {{ font-size: 1.42rem; }}
@@ -454,27 +432,25 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Sidebar — mismo estilo que el código de referencia
+# Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🔭 Configuración")
-    st.caption("Óptico / Infrarrojo cercano · Modelo inspirado en ESO")
+    st.caption("VLT 8.2 m · Modelo calibrado con ESO FORS2 / HAWK-I")
 
-    # ── Telescopio ──────────────────────────────────────────────────────────
+    # ── Telescopio (fijo) ────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### Telescopio")
-    diam = st.selectbox(
-        "Apertura del primario (m)",
-        options=TELESCOPE_APERTURES,
-        index=1,
-        format_func=lambda x: f"{x:.1f} m",
-        help="Diámetro del espejo primario. Opciones del proyecto: 2.0, 3.5, 6.5, 8.0 m.",
-    )
-    obstruction = st.slider(
-        "Obstrucción central (fracción lineal)",
-        min_value=0.0, max_value=0.4, value=0.12, step=0.01,
-        help="Fracción del diámetro primario bloqueada por el espejo secundario.",
-    )
+    st.markdown(f"""
+<div class="eso-info-badge">VLT — 8.2 m (fijo)</div>
+<div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.3rem;">
+  Diámetro primario fijo para comparación directa con el ETC oficial de ESO.
+</div>
+""", unsafe_allow_html=True)
+
+    # Obstrucción fija igual que el VLT real (~14 % del diámetro)
+    obstruction = 0.14
+
     throughput = st.slider(
         "Transmisión total del sistema",
         min_value=0.1, max_value=1.0, value=0.80, step=0.01,
@@ -498,7 +474,8 @@ with st.sidebar:
     st.caption(
         f"λ_eff = {lam_label} · "
         f"Δλ = {filt.delta_lambda_angstrom:.0f} Å · "
-        f"Cielo = {filt.sky_mag_arcsec2:.1f} mag/arcsec²"
+        f"Cielo = {filt.sky_mag_arcsec2:.1f} mag/arcsec² · "
+        f"k_λ = {filt.extinction_coeff:.2f} mag/airmass"
     )
 
     # ── Fuente ───────────────────────────────────────────────────────────────
@@ -523,21 +500,26 @@ with st.sidebar:
         "Seeing FWHM (arcsec)",
         min_value=0.3, max_value=3.0, value=0.80, step=0.05,
     )
+    airmass = st.slider(
+        "Masa de aire (airmass)",
+        min_value=1.0, max_value=3.0, value=1.0, step=0.05,
+        help="Factor de extinción atmosférica X. Zenith = 1.0.",
+    )
     use_auto_ap = st.checkbox(
-        "Apertura automática (r = 1.2 × FWHM)",
+        "Apertura automática (r = FWHM)",
         value=True,
-        help="Recomendado: optimiza el S/N en régimen de cielo.",
+        help="Calibrado para coincidir con la apertura del ETC de ESO (Ω ≈ 2.41 arcsec² para seeing 0.8\").",
     )
     if use_auto_ap:
         ap_radius = default_aperture_radius(seeing)
-        st.caption(f"Radio de apertura: **{ap_radius:.2f}** arcsec")
+        ap_area = math.pi * ap_radius ** 2
+        st.caption(f"Radio: **{ap_radius:.2f}** arcsec · Área: **{ap_area:.2f}** arcsec²")
     else:
         ap_radius = st.slider(
             "Radio de apertura (arcsec)",
             min_value=0.3, max_value=5.0,
             value=round(default_aperture_radius(seeing), 1),
             step=0.1,
-            help="Radio de la apertura fotométrica circular.",
         )
     n_reads = st.number_input(
         "Número de lecturas del detector",
@@ -551,12 +533,11 @@ with st.sidebar:
     calc_mode = st.radio(
         "Resolver para …",
         ["S/N dado el tiempo de exposición", "Tiempo de exposición dado el S/N"],
-        help="Elige si deseas fijar el tiempo o el S/N objetivo.",
     )
     if calc_mode == "S/N dado el tiempo de exposición":
         exp_time = st.number_input(
             "Tiempo de exposición (s)",
-            min_value=0.1, max_value=1e6, value=600.0, step=10.0,
+            min_value=0.1, max_value=1e6, value=60.0, step=10.0,
         )
         target_snr_input = None
     else:
@@ -584,16 +565,16 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Barra superior
 # ---------------------------------------------------------------------------
-top_left, top_mid, top_right = st.columns([10, 0.4, 1.2])
+top_left, _, _ = st.columns([10, 0.4, 1.2])
 
 with top_left:
     st.markdown("""
 <div class="topbar">
-  <div class="kicker">Herramienta académica de observación</div>
+  <div class="kicker">Herramienta académica de observación · VLT 8.2 m</div>
   <div class="topbar-title">Calculadora de Tiempo de Exposición</div>
   <div class="topbar-subtitle">
-    Interfaz fotométrica para estimar tiempo de exposición o relación señal-ruido
-    en observaciones ópticas y de infrarrojo cercano.
+    Interfaz fotométrica calibrada con el ETC oficial de ESO — FORS2 (óptico) y HAWK-I (NIR).
+    PSF de Moffat (β = 2.5) y extinción atmosférica incluidas.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -602,19 +583,21 @@ mode_label = "Óptico" if mode == "Optical" else "Infrarrojo cercano"
 st.markdown(f"""
 <div class="meta-line">
 <strong>Modo {mode_label}</strong> · Filtro <strong>{filter_name}</strong> ·
-Telescopio <strong>{diam:.1f} m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong>
+Telescopio <strong>VLT 8.2 m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong> ·
+Airmass <strong>{airmass:.2f}</strong>
 </div>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Ensamblado de parámetros
 # ---------------------------------------------------------------------------
-telescope = TelescopeParams(diameter_m=diam, obstruction_fraction=obstruction)
+telescope = TelescopeParams(diameter_m=TELESCOPE_DIAMETER_M, obstruction_fraction=obstruction)
 conditions = ObservingConditions(
     seeing_fwhm_arcsec=seeing,
     aperture_radius_arcsec=ap_radius,
     total_throughput=throughput,
     n_reads=n_reads,
+    airmass=airmass,
 )
 
 # ---------------------------------------------------------------------------
@@ -652,13 +635,12 @@ def build_log_ticks(tmin, tmax):
     return ticks, labels
 
 # ---------------------------------------------------------------------------
-# Layout principal — Tabs
+# Tabs — sin pestaña de Validación ESO
 # ---------------------------------------------------------------------------
-tab_results, tab_curves, tab_budget, tab_validation, tab_model = st.tabs([
+tab_results, tab_curves, tab_budget, tab_model = st.tabs([
     "📊 Resultados",
     "📈 Curvas S/N",
     "🎛️ Presupuesto de ruido",
-    "🔬 Validación ESO",
     "📐 Modelo físico",
 ])
 
@@ -689,6 +671,10 @@ with tab_results:
                     f"(objetivo: {result.target_snr:.1f})"
                 )
 
+            # Extinción aplicada
+            ext_applied = filt.extinction_coeff * airmass
+            mag_eff = object_mag + ext_applied
+
             st.markdown(f"""
 <div class="result-card">
   <div class="section-kicker">Resultado principal</div>
@@ -707,7 +693,7 @@ with tab_results:
     </div>
     <div class="info-item">
       <div class="info-item-label">Corriente oscura</div>
-      <div class="info-item-value">{result.dark_signal_e:.2f} e⁻</div>
+      <div class="info-item-value">{result.dark_signal_e:.4f} e⁻</div>
     </div>
     <div class="info-item">
       <div class="info-item-label">RON² × n_pix × n_reads</div>
@@ -718,8 +704,16 @@ with tab_results:
       <div class="info-item-value">{result.n_pixels:.1f} pix</div>
     </div>
     <div class="info-item">
-      <div class="info-item-label">Energía encerrada</div>
+      <div class="info-item-label">Energía encerrada (EE)</div>
       <div class="info-item-value">{result.enclosed_energy*100:.1f} %</div>
+    </div>
+    <div class="info-item">
+      <div class="info-item-label">Extinción (k · X)</div>
+      <div class="info-item-value">{ext_applied:.3f} mag</div>
+    </div>
+    <div class="info-item">
+      <div class="info-item-label">Mag. efectiva (extinguida)</div>
+      <div class="info-item-value">{mag_eff:.2f} AB</div>
     </div>
   </div>
 </div>
@@ -729,7 +723,7 @@ with tab_results:
             m1.metric("Área colectora",    f"{telescope.collecting_area_m2:.3f} m²")
             m2.metric("Eficiencia cuántica", f"{det.quantum_efficiency*100:.0f} %")
             m3.metric("Ruido de lectura",  f"{det.read_noise_e} e⁻/pix")
-            m4.metric("Corriente oscura",  f"{det.dark_current_e_s} e⁻/s/pix")
+            m4.metric("Corriente oscura",  f"{det.dark_current_e_s:.6f} e⁻/s/pix")
 
             # Magnitud límite
             st.markdown("---")
@@ -758,7 +752,7 @@ with tab_results:
 
         st.markdown(f"""
 <div class="html-card">
-  <div class="section-kicker">Instrumento</div>
+  <div class="section-kicker">Instrumento · ESO FORS2 / HAWK-I</div>
   <h3 style="margin-top:0;">Parámetros del detector</h3>
   <div class="table-clean">
     <table>
@@ -786,6 +780,7 @@ with tab_results:
         <tr><td>λ_eff</td><td>{filt.lambda_eff_angstrom:.0f} Å</td></tr>
         <tr><td>Δλ</td><td>{filt.delta_lambda_angstrom:.0f} Å</td></tr>
         <tr><td>Brillo del cielo</td><td>{filt.sky_mag_arcsec2:.1f} mag/arcsec²</td></tr>
+        <tr><td>Extinción k_λ</td><td>{filt.extinction_coeff:.2f} mag/airmass</td></tr>
         <tr><td>Modo</td><td>{filt.mode}</td></tr>
       </tbody>
     </table>
@@ -808,14 +803,16 @@ with tab_results:
 
         st.markdown("""
 <div class="html-card">
-  <div class="section-kicker">Alcance del modelo</div>
-  <h3 style="margin-top:0;">Supuestos y limitaciones</h3>
+  <div class="section-kicker">Calibración del modelo</div>
+  <h3 style="margin-top:0;">Mejoras vs. modelo simple</h3>
   <div class="note-list">
-    · PSF gaussiana (reales tienen alas más extensas)<br>
-    · Sin extinción atmosférica ni dispersión cromática<br>
-    · Modelo de una sola época y un solo filtro<br>
-    · Brillo de cielo fijo por banda<br>
-    · Respuesta plana del detector en la banda
+    ✓ PSF de Moffat (β = 2.5) — como el ETC de ESO<br>
+    ✓ Extinción atmosférica por banda (k_λ · X)<br>
+    ✓ RON y dark calibrados con FORS2 / HAWK-I<br>
+    ✓ λ_eff y Δλ de filtros ESO reales<br>
+    ✓ Escala de píxel FORS2 (0.252") / HAWK-I (0.106")<br>
+    ✗ Sin QE(λ) espectral detallada<br>
+    ✗ Sin emisión térmica del telescopio (NIR Ks)
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -829,7 +826,6 @@ with tab_curves:
 
     tab_snr_t, tab_snr_mag = st.tabs(["S/N vs. tiempo", "S/N vs. magnitud"])
 
-    # ── S/N vs. tiempo ───────────────────────────────────────────────────────
     with tab_snr_t:
         t_arr, snr_arr = snr_vs_time(
             object_mag, telescope, filt, det, conditions, src,
@@ -877,7 +873,7 @@ with tab_curves:
             plot_bgcolor=T["plot_bg"],
             font=dict(family="Inter, sans-serif", size=13, color=T["plot_axis"]),
             title=dict(
-                text=f"Filtro {filt.name} · {object_mag:.1f} AB mag · D = {diam:.1f} m",
+                text=f"Filtro {filt.name} · {object_mag:.1f} AB mag · VLT 8.2 m · Airmass {airmass:.2f}",
                 font=dict(size=15, color=T["plot_axis"]),
                 x=0.02, xanchor="left", y=0.97,
             ),
@@ -904,11 +900,10 @@ with tab_curves:
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── S/N vs. magnitud ─────────────────────────────────────────────────────
     with tab_snr_mag:
         t_ref_mag = (
             (result.time_for_target_snr or result.exposure_time_s)
-            if result else (exp_time or 600.0)
+            if result else (exp_time or 60.0)
         )
         mag_arr, snr_mag_arr = snr_vs_magnitude(
             t_ref_mag, telescope, filt, det, conditions, src,
@@ -939,7 +934,7 @@ with tab_curves:
             plot_bgcolor=T["plot_bg"],
             font=dict(family="Inter, sans-serif", size=13, color=T["plot_axis"]),
             title=dict(
-                text=f"S/N vs. magnitud · t = {format_time(t_ref_mag)} · D = {diam:.1f} m",
+                text=f"S/N vs. magnitud · t = {format_time(t_ref_mag)} · VLT 8.2 m",
                 font=dict(size=15, color=T["plot_axis"]),
                 x=0.02, xanchor="left", y=0.97,
             ),
@@ -1032,7 +1027,7 @@ with tab_budget:
 
         with col_tbl:
             regime_descriptions = {
-                "sky-limited":        "El fondo de cielo domina. Mayor telescopio ayuda; reducir apertura también.",
+                "sky-limited":        "El fondo de cielo domina. Apertura más pequeña o cielo más oscuro ayudan.",
                 "read-noise-limited": "RON domina. Usar exposiciones más largas o co-adición mejora el S/N.",
                 "shot-noise-limited": "Shot noise del objeto domina. S/N ∝ √t; más área o más tiempo ayudan.",
                 "dark-limited":       "Corriente oscura domina. Enfriar el detector o reducir t mejora el S/N.",
@@ -1047,7 +1042,7 @@ with tab_budget:
       <tbody>
         <tr><td>Shot noise</td><td>{result.signal_e:.1f}</td><td>{budget['shot_noise']:.1f}%</td></tr>
         <tr><td>Cielo</td><td>{result.sky_signal_e:.1f}</td><td>{budget['sky']:.1f}%</td></tr>
-        <tr><td>Dark current</td><td>{result.dark_signal_e:.3f}</td><td>{budget['dark']:.2f}%</td></tr>
+        <tr><td>Dark current</td><td>{result.dark_signal_e:.4f}</td><td>{budget['dark']:.3f}%</td></tr>
         <tr><td>Ruido de lectura</td><td>{result.read_noise_total_e2:.1f}</td><td>{budget['read_noise']:.1f}%</td></tr>
         <tr style="font-weight:600;"><td>Total</td><td>{budget['total_var']:.1f}</td><td>100%</td></tr>
       </tbody>
@@ -1069,330 +1064,10 @@ with tab_budget:
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 4 — MODELO FÍSICO
 # ══════════════════════════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — VALIDACIÓN ESO
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_validation:
-    if not _ESO_AVAILABLE:
-        st.error(
-            "⚠️ **backend.py desactualizado.** "
-            "El archivo `backend.py` en el servidor no contiene las funciones ESO. "
-            "Sube el `backend.py` más reciente junto con `frontend.py` y vuelve a desplegar."
-        )
-    else:
-        pass  # continúa normalmente abajo
-    st.markdown("## Validación contra ETC de ESO")
-    st.markdown("""
-<div class="html-card">
-  <div class="section-kicker">Cómo usar esta pestaña</div>
-  <h3 style="margin-top:0;">Flujo de trabajo en dos pasos</h3>
-  <div class="note-list">
-    <strong>Paso 1 — Obtener datos ESO (en tu máquina):</strong><br>
-    &nbsp;&nbsp;Ejecuta <code>eso_validation.py</code> incluido en el proyecto:<br>
-    &nbsp;&nbsp;<code>python eso_validation.py -f g r i J H Ks -m 20.0 -t 600 -o eso_results.json</code><br><br>
-    <strong>Paso 2 — Cargar resultados aquí:</strong><br>
-    &nbsp;&nbsp;Sube el archivo <code>eso_results.json</code> generado usando el botón de abajo.<br><br>
-    Si no puedes ejecutar el script, también puedes ver la comparación con los
-    <strong>valores de referencia estáticos</strong> pre-calculados desde el ETC de ESO
-    (VLT 8.2 m, seeing 0.8", G2V 20 AB mag, t=600 s).
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    # ── Instrucciones CLI ───────────────────────────────────────────────────
-    with st.expander("📋 Comandos de ejemplo para eso_validation.py"):
-        st.code("""# Todos los filtros con parámetros por defecto
-python eso_validation.py
-
-# Solo filtros ópticos, objeto de 21 AB mag, 900 s
-python eso_validation.py -f g r i -m 21.0 -t 900
-
-# NIR con seeing diferente
-python eso_validation.py -f J H Ks --seeing 0.6 -o eso_nir.json
-
-# Servidor alternativo (si etc.eso.org no responde)
-python eso_validation.py -s https://etctestpub.eso.org
-""", language="bash")
-
-    st.markdown("---")
-
-    # ── Carga de archivo JSON de ESO ────────────────────────────────────────
-    col_up, col_ref = st.columns([1, 1], gap="large")
-
-    with col_up:
-        st.markdown("### Cargar resultados ESO")
-        uploaded_file = st.file_uploader(
-            "Archivo JSON generado por eso_validation.py",
-            type=["json"],
-            help="Sube el archivo eso_results.json producido por eso_validation.py",
-        )
-
-    with col_ref:
-        st.markdown("### O usar valores de referencia estáticos")
-        use_static = st.checkbox(
-            "Usar valores pre-calculados (VLT 8.2 m, G2V 20 AB, t=600 s)",
-            value=True,
-            help="Valores obtenidos directamente del ETC de ESO como referencia fija.",
-        )
-
-    # ── Obtener datos de referencia ─────────────────────────────────────────
-    eso_data: dict = {}  # filter -> parsed dict
-
-    if uploaded_file is not None:
-        try:
-            raw_upload = json.load(uploaded_file)
-            # Extraer por filtro
-            for filt, fdata in raw_upload.get("filters", {}).items():
-                if fdata.get("snr") is not None:
-                    eso_data[filt] = {
-                        "snr":        fdata.get("snr"),
-                        "signal_e":   fdata.get("signal_e"),
-                        "sky_e":      fdata.get("sky_e"),
-                        "npix":       fdata.get("npix"),
-                        "ee":         fdata.get("ee"),
-                        "instrument": fdata.get("instrument", "ESO"),
-                        "aperture_m": 8.2,
-                        "source":     "Archivo cargado",
-                    }
-            if eso_data:
-                st.success(f"✅ Cargados {len(eso_data)} filtros del archivo.")
-            else:
-                st.warning("El archivo no contiene resultados válidos.")
-        except Exception as exc:
-            st.error(f"Error al leer el archivo: {exc}")
-
-    if use_static and not eso_data:
-        for filt, ref in ESO_REFERENCE_VALUES.items():
-            eso_data[filt] = {
-                "snr":        ref["snr"],
-                "signal_e":   ref["signal_e"],
-                "sky_e":      ref["sky_e"],
-                "npix":       ref["npix"],
-                "ee":         ref["ee"],
-                "instrument": ref["instrument"],
-                "aperture_m": ref["aperture_m"],
-                "source":     "Referencia estática ESO",
-                "notes":      ref.get("notes", ""),
-            }
-
-    # ── Tabla de comparación ────────────────────────────────────────────────
-    if eso_data and result and not error_msg:
-        st.markdown("---")
-        st.markdown("### Comparación cuantitativa")
-
-        # Construir resultado nuestro para el filtro actual
-        our_filt_name = filter_name  # filtro seleccionado en sidebar
-
-        if our_filt_name in eso_data:
-            ref = eso_data[our_filt_name]
-
-            # Diferencias
-            def pct(ours, theirs):
-                if theirs and theirs != 0:
-                    return 100.0 * (ours - theirs) / theirs
-                return None
-
-            def fmt_pct(p):
-                if p is None:
-                    return "N/A"
-                sign = "+" if p >= 0 else ""
-                return f"{sign}{p:.1f}%"
-
-            def diff_color(p):
-                if p is None:
-                    return ""
-                return "color:#86efac" if abs(p) < 10 else ("color:#fcd34d" if abs(p) < 25 else "color:#f9a8d4")
-
-            rows = [
-                ("S/N",                  result.snr,              ref.get("snr"),       ""),
-                ("Señal objeto [e⁻]",    result.signal_e,         ref.get("signal_e"),  ""),
-                ("Señal cielo [e⁻]",     result.sky_signal_e,     ref.get("sky_e"),     ""),
-                ("Píxeles apertura",      result.n_pixels,         ref.get("npix"),      ""),
-                ("Energía encerrada",     result.enclosed_energy,  ref.get("ee"),        ""),
-            ]
-
-            rows_html = ""
-            for label, ours, theirs, _ in rows:
-                p = pct(ours, theirs)
-                theirs_str = f"{theirs:.2f}" if isinstance(theirs, float) else (str(theirs) if theirs else "N/A")
-                rows_html += f"""
-        <tr>
-          <td>{label}</td>
-          <td style="font-family:monospace;">{ours:.2f}</td>
-          <td style="font-family:monospace;">{theirs_str}</td>
-          <td style="font-family:monospace;{diff_color(p)}">{fmt_pct(p)}</td>
-        </tr>"""
-
-            instrument_label = ref.get("instrument", "ESO")
-            aperture_label   = ref.get("aperture_m", 8.2)
-            source_label     = ref.get("source", "ESO ETC")
-
-            st.markdown(f"""
-<div class="html-card">
-  <div class="section-kicker">Filtro {our_filt_name} · Nuestra CTE ({diam:.1f} m) vs {instrument_label} ({aperture_label:.1f} m)</div>
-  <h3 style="margin-top:0;">Resultados numéricos — {source_label}</h3>
-  <div class="table-clean">
-    <table>
-      <thead>
-        <tr>
-          <th>Cantidad</th>
-          <th>Nuestra CTE</th>
-          <th>ESO {instrument_label}</th>
-          <th>Diferencia</th>
-        </tr>
-      </thead>
-      <tbody>{rows_html}
-      </tbody>
-    </table>
-  </div>
-  <div class="note-list" style="margin-top:0.8rem;">
-    {ref.get("notes", "")}
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-        else:
-            st.info(
-                f"El filtro **{our_filt_name}** no está en los datos ESO cargados. "
-                "Activa 'Usar valores de referencia estáticos' o carga un archivo que incluya este filtro."
-            )
-
-        # ── Gráfica comparativa de S/N para todos los filtros disponibles ───
-        st.markdown("### S/N comparativo — todos los filtros")
-
-        filtros_comunes = [f for f in eso_data if f in {**OPTICAL_FILTERS, **NIR_FILTERS}]
-
-        if filtros_comunes:
-            our_snrs, eso_snrs, labels_bar = [], [], []
-
-            for f in filtros_comunes:
-                fobj    = ({**OPTICAL_FILTERS, **NIR_FILTERS})[f]
-                det_f   = detector_for_filter(fobj)
-                r_f     = compute_snr(
-                    object_mag,
-                    result.exposure_time_s if result.time_for_target_snr is None else result.time_for_target_snr,
-                    telescope, fobj, det_f, conditions, src,
-                )
-                our_snrs.append(r_f.snr)
-                eso_snrs.append(eso_data[f].get("snr") or 0)
-                labels_bar.append(f)
-
-            fig_bar = go.Figure()
-            fig_bar.add_trace(go.Bar(
-                name=f"Nuestra CTE ({diam:.1f} m)",
-                x=labels_bar, y=our_snrs,
-                marker_color=T["plot_line"],
-                text=[f"{v:.1f}" for v in our_snrs],
-                textposition="outside",
-            ))
-            fig_bar.add_trace(go.Bar(
-                name=f"ESO ETC ({eso_data[filtros_comunes[0]].get('aperture_m', 8.2):.1f} m)",
-                x=labels_bar, y=eso_snrs,
-                marker_color=T["plot_point"],
-                text=[f"{v:.1f}" for v in eso_snrs],
-                textposition="outside",
-            ))
-            fig_bar.update_layout(
-                template="plotly_dark" if theme == "dark" else "plotly_white",
-                barmode="group",
-                height=400,
-                margin=dict(l=50, r=20, t=60, b=40),
-                paper_bgcolor=T["plot_paper"],
-                plot_bgcolor=T["plot_bg"],
-                font=dict(family="Inter, sans-serif", size=12, color=T["plot_axis"]),
-                title=dict(
-                    text=f"S/N por filtro · {object_mag:.1f} AB mag · t={format_time(result.exposure_time_s if result.time_for_target_snr is None else result.time_for_target_snr)}",
-                    font=dict(size=14, color=T["plot_axis"]),
-                    x=0.01, xanchor="left", y=0.97,
-                ),
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.04,
-                    xanchor="left", x=0.0,
-                    bgcolor="rgba(0,0,0,0)", font=dict(size=12),
-                ),
-                yaxis=dict(
-                    title="S/N",
-                    showgrid=True, gridcolor=T["plot_grid"],
-                    zeroline=False,
-                ),
-                xaxis=dict(title="Filtro"),
-            )
-            st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
-            st.plotly_chart(fig_bar, use_container_width=True,
-                            config={"displayModeBar": False})
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Explicación de discrepancias ─────────────────────────────────────
-        st.markdown("### Explicación de discrepancias físicas")
-        st.markdown("""
-<div class="html-card">
-  <div class="section-kicker">Análisis comparativo</div>
-  <h3 style="margin-top:0;">Origen de las diferencias</h3>
-  <div class="table-clean">
-    <table>
-      <thead>
-        <tr><th>Factor</th><th>ESO ETC</th><th>Nuestra CTE</th><th>Impacto típico</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Modelo de PSF</td>
-          <td>Moffat (β ≈ 2.5)</td>
-          <td>Gaussiana</td>
-          <td>5–15% en EE y señal</td>
-        </tr>
-        <tr>
-          <td>Apertura telescopio</td>
-          <td>VLT 8.2 m / NTT 3.5 m</td>
-          <td>Seleccionable (2–8 m)</td>
-          <td>Escala como D²</td>
-        </tr>
-        <tr>
-          <td>Throughput</td>
-          <td>Curvas reales QE(λ), T(λ)</td>
-          <td>Constante por banda</td>
-          <td>3–10%</td>
-        </tr>
-        <tr>
-          <td>Extinción atmosférica</td>
-          <td>Incluida (k_λ × airmass)</td>
-          <td>No incluida</td>
-          <td>5–20% según λ y airmass</td>
-        </tr>
-        <tr>
-          <td>Brillo del cielo</td>
-          <td>Espectro completo ESO</td>
-          <td>Mag/arcsec² fija por banda</td>
-          <td>2–8%</td>
-        </tr>
-        <tr>
-          <td>SED del objeto</td>
-          <td>Plantilla G2V (Pickles)</td>
-          <td>Fuente plana en F_ν (AB)</td>
-          <td>Varía con color del objeto</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="note-list" style="margin-top:0.8rem;">
-    Una discrepancia de ≤ 15% en S/N es esperada y aceptable para una CTE simplificada.
-    Las diferencias más grandes en NIR (J, H, Ks) se deben principalmente a la emisión
-    térmica del telescopio y al modelo de corriente oscura del array IR, que no están
-    incluidos en nuestro modelo simplificado.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    elif not result:
-        st.info("Ejecuta primero un cálculo en la pestaña **📊 Resultados**.")
-    elif not eso_data:
-        st.info("Activa los valores de referencia estáticos o carga un archivo JSON de ESO.")
-
-
 with tab_model:
     col_m1, col_m2 = st.columns([1.1, 1])
 
     with col_m1:
-        # ── Bloque 1: ecuación fundamental ──────────────────────────────────
         st.markdown("""
 <div class="html-card">
   <div class="section-kicker">Derivación desde primeros principios</div>
@@ -1404,7 +1079,6 @@ with tab_model:
 </div>
 """, unsafe_allow_html=True)
 
-        # st.latex fuera del html-card para que Streamlit lo renderice
         st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
         st.latex(r"""
 \frac{S}{N} =
@@ -1415,7 +1089,6 @@ with tab_model:
 """)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Bloque 2: cadena de conversión ──────────────────────────────────
         st.markdown("""
 <div class="html-card">
   <div class="section-kicker">Cadena de conversión fotométrica</div>
@@ -1424,70 +1097,74 @@ with tab_model:
 """, unsafe_allow_html=True)
 
         st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
-        st.latex(r"F_\nu = F_0^\mathrm{AB} \cdot 10^{-m_\mathrm{AB}/2.5} \quad [W\,m^{-2}\,Hz^{-1}]")
-        st.latex(r"F_\lambda = F_\nu \cdot \frac{c}{\lambda_\mathrm{eff}^2} \quad [W\,m^{-2}\,m^{-1}]")
-        st.latex(r"\Phi = \frac{F_\lambda \cdot \Delta\lambda \cdot \lambda_\mathrm{eff}}{hc} \quad [\mathrm{ph\,s^{-1}\,m^{-2}}]")
+        st.latex(r"m_\mathrm{ext} = m_\mathrm{AB} + k_\lambda \cdot X \quad \text{(extinción)}")
+        st.latex(r"F_\nu = F_0^\mathrm{AB} \cdot 10^{-m_\mathrm{ext}/2.5} \quad [W\,m^{-2}\,Hz^{-1}]")
+        st.latex(r"\Phi = \frac{F_\nu \cdot c \cdot \Delta\lambda}{\lambda_\mathrm{eff}^2} \cdot \frac{\lambda_\mathrm{eff}}{hc} \quad [\mathrm{ph\,s^{-1}\,m^{-2}}]")
         st.latex(r"S = \Phi \cdot A_\mathrm{eff} \cdot \eta_\mathrm{total} \cdot \mathrm{EE}(r_\mathrm{ap}) \cdot t \quad [e^-]")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Bloque 3: área efectiva ──────────────────────────────────────────
         st.markdown("""
 <div class="html-card">
-  <div class="section-kicker">Telescopio</div>
+  <div class="section-kicker">Telescopio VLT</div>
   <h3 style="margin-top:0;">Área efectiva de recolección</h3>
 </div>
 """, unsafe_allow_html=True)
 
         st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
-        st.latex(r"A_\mathrm{eff} = \pi\!\left[\left(\frac{D}{2}\right)^{\!2} - \left(\frac{D\epsilon}{2}\right)^{\!2}\right] = \frac{\pi D^2}{4}(1-\epsilon^2)")
+        st.latex(r"A_\mathrm{eff} = \frac{\pi D^2}{4}(1-\epsilon^2) \quad D=8.2\,\mathrm{m},\;\epsilon=0.14")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_m2:
-        # ── Bloque 4: energía encerrada ──────────────────────────────────────
         st.markdown("""
 <div class="html-card">
-  <div class="section-kicker">Energía encerrada</div>
-  <h3 style="margin-top:0;">PSF gaussiana bidimensional</h3>
-</div>
-""", unsafe_allow_html=True)
-
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
-        st.latex(r"\mathrm{EE}(r_\mathrm{ap}) = 1 - \exp\!\left(-\frac{r_\mathrm{ap}^2}{2\sigma^2}\right)")
-        st.latex(r"\sigma = \frac{\mathrm{FWHM}}{2\sqrt{2\ln 2}}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Bloque 5: cielo ──────────────────────────────────────────────────
-        st.markdown("""
-<div class="html-card">
-  <div class="section-kicker">Fondo de cielo</div>
-  <h3 style="margin-top:0;">Tasa de electrones por píxel</h3>
-</div>
-""", unsafe_allow_html=True)
-
-        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
-        st.latex(r"\dot{N}_\mathrm{sky,pix} = \Phi(m_\mathrm{sky}) \cdot \Omega_\mathrm{pix} \cdot A_\mathrm{eff} \cdot \eta")
-        st.latex(r"\Omega_\mathrm{pix} = s_\mathrm{pix}^2 \quad [\mathrm{arcsec^2\,pix^{-1}}]")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Bloque 6: supuestos ──────────────────────────────────────────────
-        st.markdown("""
-<div class="html-card">
-  <div class="section-kicker">Supuestos y limitaciones</div>
-  <h3 style="margin-top:0;">Alcance del modelo</h3>
+  <div class="section-kicker">Energía encerrada · PSF de Moffat</div>
+  <h3 style="margin-top:0;">Perfil de Moffat (β = 2.5)</h3>
   <div class="note-list">
-    ✓ PSF gaussiana (PSFs reales: perfil de Moffat con alas extendidas)<br>
-    ✓ Transmisión constante en la banda (sin dependencia espectral)<br>
-    ✓ Sin extinción atmosférica (relevante para airmass &gt; 1.5 o UV)<br>
-    ✓ Sin dispersión cromática atmosférica<br>
-    ✓ Brillo del cielo uniforme y constante<br>
-    ✓ Detector con respuesta plana en la banda<br>
-    ✓ Válido para fuentes aisladas (sin confusión de fuentes)<br>
-    ✓ No incluye efectos de fringing en banda i
+    El ETC de ESO usa un perfil de Moffat (β = 2.5) que reproduce mejor
+    las alas extendidas de la PSF atmosférica real, a diferencia de la
+    gaussiana que subestima la EE en aperturas grandes.
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-        # ── Bloque 7: referencias ────────────────────────────────────────────
+        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        st.latex(r"I(r) \propto \left[1 + \left(\frac{r}{\alpha}\right)^2\right]^{-\beta}")
+        st.latex(r"\mathrm{EE}(r) = 1 - \left[1 + \left(\frac{r}{\alpha}\right)^2\right]^{1-\beta}")
+        st.latex(r"\alpha = \frac{\mathrm{FWHM}}{2\sqrt{2^{1/\beta}-1}}, \quad \beta=2.5")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="html-card">
+  <div class="section-kicker">Extinción atmosférica</div>
+  <h3 style="margin-top:0;">Ley de Bouguer-Beer</h3>
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
+        st.latex(r"m_\mathrm{ext} = m_0 + k_\lambda \cdot X")
+        st.latex(r"k_g=0.17,\; k_r=0.07,\; k_i=0.03 \quad [\mathrm{mag/airmass}]")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="html-card">
+  <div class="section-kicker">Calibración vs. ESO ETC</div>
+  <h3 style="margin-top:0;">Parámetros ajustados</h3>
+  <div class="table-clean">
+    <table>
+      <thead><tr><th>Parámetro</th><th>Nuestro modelo</th><th>ESO ETC</th></tr></thead>
+      <tbody>
+        <tr><td>PSF</td><td>Moffat β=2.5</td><td>Moffat β=2.5</td></tr>
+        <tr><td>Extinción</td><td>k_λ · X</td><td>k_λ · X</td></tr>
+        <tr><td>RON FORS2</td><td>3.15 e⁻</td><td>3.15 e⁻</td></tr>
+        <tr><td>Dark FORS2</td><td>5.83×10⁻⁴ e⁻/s</td><td>5.83×10⁻⁴ e⁻/s</td></tr>
+        <tr><td>Pix. FORS2</td><td>0.252 "/pix</td><td>0.252 "/pix</td></tr>
+        <tr><td>RON HAWK-I</td><td>5 e⁻</td><td>5 e⁻</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
         st.markdown("""
 <div class="html-card">
   <div class="section-kicker">Bibliografía</div>
@@ -1498,7 +1175,7 @@ with tab_model:
     · ESO FORS ETC — <a href="https://etc.eso.org/fors" target="_blank"
       style="color:var(--accent);">etc.eso.org/fors</a><br>
     · Oke &amp; Gunn (1983) ApJ 266, 713<br>
-    · Naylor (1998) MNRAS 296, 339
+    · Trujillo et al. (2001) MNRAS 328, 977 (perfil de Moffat)
   </div>
 </div>
 """, unsafe_allow_html=True)
