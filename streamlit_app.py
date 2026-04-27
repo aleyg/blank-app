@@ -10,7 +10,7 @@ Este módulo se encarga exclusivamente de:
   - Mostrar resultados, gráficas y diagnósticos
 
 Toda la física vive en backend.py.
-Telescopio fijo: VLT 8.2 m — para comparación directa con el ETC de ESO.
+Telescopio fijo: VLT 8 m — para comparación directa con el ETC de ESO.
 """
 
 import json
@@ -436,13 +436,13 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🔭 Configuración")
-    st.caption("VLT 8.2 m · Modelo calibrado con ESO FORS2 / HAWK-I")
+    st.caption("VLT 8 m · Modelo calibrado con ESO FORS2 / HAWK-I")
 
     # ── Telescopio (fijo) ────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### Telescopio")
     st.markdown(f"""
-<div class="eso-info-badge">VLT — 8.2 m (fijo)</div>
+<div class="eso-info-badge">VLT — 8 m (fijo)</div>
 <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.3rem;">
   Diámetro primario fijo para comparación directa con el ETC oficial de ESO.
 </div>
@@ -548,23 +548,21 @@ with st.sidebar:
 top_left, _, _ = st.columns([10, 0.4, 1.2])
 
 with top_left:
-    st.markdown("""
+    st.markdown(f"""
 <div class="topbar">
-  <div class="kicker">Herramienta académica de observación · VLT 8.2 m</div>
+  <div class="kicker">Herramienta académica de observación · VLT 8 m</div>
   <div class="topbar-title">Calculadora de Tiempo de Exposición</div>
   <div class="topbar-subtitle">
     Interfaz fotométrica calibrada con el ETC oficial de ESO — FORS2 (óptico) y HAWK-I (NIR).
     PSF de Moffat (β = 2.5) y extinción atmosférica incluidas.
   </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class="meta-line">
+                <div class="meta-line">
 <strong>Modo Óptico</strong> · Filtro <strong>r</strong> ·
-Telescopio <strong>VLT 8.2 m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong> ·
+Telescopio <strong> 8 m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong> ·
 Airmass <strong>{airmass:.2f}</strong>
 </div>
+</div>
+              
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
@@ -853,7 +851,7 @@ with tab_curves:
             plot_bgcolor=T["plot_bg"],
             font=dict(family="Inter, sans-serif", size=13, color=T["plot_axis"]),
             title=dict(
-                text=f"Filtro {filt.name} · {object_mag:.1f} AB mag · VLT 8.2 m · Airmass {airmass:.2f}",
+                text=f"Filtro {filt.name} · {object_mag:.1f} AB mag · VLT 8 m · Airmass {airmass:.2f}",
                 font=dict(size=15, color=T["plot_axis"]),
                 x=0.02, xanchor="left", y=0.97,
             ),
@@ -914,7 +912,7 @@ with tab_curves:
             plot_bgcolor=T["plot_bg"],
             font=dict(family="Inter, sans-serif", size=13, color=T["plot_axis"]),
             title=dict(
-                text=f"S/N vs. magnitud · t = {format_time(t_ref_mag)} · VLT 8.2 m",
+                text=f"S/N vs. magnitud · t = {format_time(t_ref_mag)} · VLT 8 m",
                 font=dict(size=15, color=T["plot_axis"]),
                 x=0.02, xanchor="left", y=0.97,
             ),
@@ -1221,7 +1219,7 @@ with tab_validation:
             st.markdown(f"""
 <div class="html-card">
   <div class="section-kicker">
-    Filtro r · VLT 8.2 m · {_mag_in} AB · {_texp_in:.0f} s · airmass {_air_in} · seeing {_see_in:.2f}" · Ω = {eso_omega:.2f} arcsec²
+    Filtro r · VLT 8 m · {_mag_in} AB · {_texp_in:.0f} s · airmass {_air_in} · seeing {_see_in:.2f}" · Ω = {eso_omega:.2f} arcsec²
   </div>
   <h3 style="margin-top:0;">Tabla de comparación</h3>
   <div class="table-clean">
@@ -1331,7 +1329,7 @@ with tab_model:
 """, unsafe_allow_html=True)
 
         st.markdown('<div class="eq-wrap">', unsafe_allow_html=True)
-        st.latex(r"A_\mathrm{eff} = \frac{\pi D^2}{4}(1-\epsilon^2) \quad D=8.2\,\mathrm{m},\;\epsilon=0.14")
+        st.latex(r"A_\mathrm{eff} = \frac{\pi D^2}{4}(1-\epsilon^2) \quad D=8\,\mathrm{m},\;\epsilon=0.14")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_m2:
