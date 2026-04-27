@@ -107,7 +107,7 @@ class ObservingConditions:
     """Parámetros atmosféricos y de observación."""
     seeing_fwhm_arcsec: float        # FWHM de la PSF  [arcsec]
     aperture_radius_arcsec: float    # radio de apertura fotométrica [arcsec]
-    total_throughput: float = 0.36   # transmisión óptica FORS2 calibrada (sin QE del detector) [0–1]
+    total_throughput: float = 0.80   # transmisión total sistema según enunciado [0–1]
     n_reads: int = 1                 # número de lecturas (útil para NIR up-the-ramp)
     airmass: float = 1.0             # masa de aire para extinción atmosférica
 
@@ -118,10 +118,13 @@ class ObservingConditions:
 # ---------------------------------------------------------------------------
 
 # FORS2 en VLT: RON real ~3.15 e-, dark ~0.000583 e-/s/pix, QE ~0.85
+# Escala de píxel fijada en 0.20"/pix según el enunciado del proyecto.
+# Nota: FORS2 real usa 0.252"/pix (SR) o 0.125"/pix (HR), pero el enunciado
+# especifica explícitamente 0.20"/pix como parámetro del modelo simplificado.
 OPTICAL_DETECTOR = DetectorParams(
     read_noise_e=3.15,
     dark_current_e_s=0.000583,
-    pixel_scale_arcsec=0.252,
+    pixel_scale_arcsec=0.20,
     quantum_efficiency=0.85,
 )
 
@@ -133,15 +136,11 @@ NIR_DETECTOR = DetectorParams(
     quantum_efficiency=0.75,
 )
 
-# Filtros con coeficientes de extinción medidos en Paranal (ESO)
-# k_λ valores: g~0.17, r~0.07, i~0.03, J~0.05, H~0.03, Ks~0.07
-#
-# sky_mag calibrados contra el ETC oficial de ESO (FORS2, VLT 8.2 m).
-# Banda r verificada con datos reales: Sobj=123 000 e-, Ssky=36 000 e-, S/N=308
-# (t=60 s, mag=20 AB, airmass=1.0, seeing=0.8"). Bandas g e i escaladas en
-# proporcion. El valor efectivo de sky_mag reproduce la tasa real de fotones del
-# espectro completo de Paranal (Noll et al. 2012) integrado sobre la banda,
-# incluyendo lineas de emision OH, O2 y Na.
+# Filtros del modelo simplificado (según enunciado del proyecto).
+# NOTA: los coeficientes de extincion (extinction_coeff) están definidos en los
+# filtros pero NO se aplican en compute_snr — el enunciado establece que la
+# extinción atmosférica no se considera en este modelo.
+# Los sky_mag son valores representativos de Paranal para cada banda.
 OPTICAL_FILTERS: dict[str, FilterParams] = {
     "g":  FilterParams("g",  4730.0, 1340.0, 22.20, "optical", extinction_coeff=0.17),
     "r":  FilterParams("r",  6550.0, 1650.0, 22.37, "optical", extinction_coeff=0.07),
@@ -358,7 +357,13 @@ def compute_snr(
     """
     Calcula la relación señal-ruido (S/N) para un tiempo de exposición dado.
 
-    Incluye extinción atmosférica y PSF de Moffat (como el ETC de ESO).
+    Simplificaciones del modelo (según enunciado del proyecto):
+    - PSF gaussiana perfecta (cielo uniforme y constante)
+    - Sin extinción atmosférica
+    - Sin ruido de scintilación
+    - Sin saturación del detector
+    - Transmisión total constante T = 0.80
+    - Escala de píxel fija 0.20"/pix
     """
     t: float = exposure_time_s
     A: float = telescope.collecting_area_m2
@@ -367,15 +372,12 @@ def compute_snr(
 
     eta: float = conditions.total_throughput * detector.quantum_efficiency
 
-    # Aplicar extinción atmosférica a la magnitud del objeto
-    mag_extincted: float = apply_extinction(
-        object_mag,
-        filter_params.extinction_coeff,
-        conditions.airmass,
-    )
-
+    # LIMITACIÓN DEL MODELO (según enunciado):
+    # No se aplica extinción atmosférica. La magnitud del objeto se usa directa-
+    # mente sin corrección por airmass. Tampoco se modela ruido de scintilación
+    # ni saturación del detector.
     # ── Señal del objeto [e⁻] ──────────────────────────────────────────────
-    photon_flux: float = mag_ab_to_photon_flux(mag_extincted, lam, dlam)
+    photon_flux: float = mag_ab_to_photon_flux(object_mag, lam, dlam)
 
     if source_type == "point":
         ee: float = enclosed_energy_fraction(
@@ -735,7 +737,7 @@ if __name__ == "__main__":
         seeing_fwhm_arcsec=0.8,
         aperture_radius_arcsec=default_aperture_radius(0.8),
         total_throughput=0.80,
-        airmass=1.0,
+        airmass=1.0,  # airmass conservado como parámetro aunque extinción no se aplica
     )
 
     r = compute_snr(20.0, 600.0, tel, filt, det, cond)
