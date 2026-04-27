@@ -459,7 +459,7 @@ with st.sidebar:
 
     # ── Filtro y modo (fijos: r óptico) ──────────────────────────────────────
     mode = "Optical"
-    filter_name = "r"
+    filter_name = "g"
     filt = OPTICAL_FILTERS[filter_name]
     det = detector_for_filter(filt)
 
@@ -552,10 +552,6 @@ with top_left:
 <div class="topbar">
   <div class="kicker">Herramienta académica de observación · VLT 8 m</div>
   <div class="topbar-title">Calculadora de Tiempo de Exposición</div>
-  <div class="topbar-subtitle">
-    Interfaz fotométrica calibrada con el ETC oficial de ESO — FORS2 (óptico) y HAWK-I (NIR).
-    PSF de Moffat (β = 2.5) y extinción atmosférica incluidas.
-  </div>
                 <div class="meta-line">
 <strong>Modo Óptico</strong> · Filtro <strong>r</strong> ·
 Telescopio <strong> 8 m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong> ·
