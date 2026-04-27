@@ -1254,46 +1254,6 @@ with tab_validation:
             dc3.metric("Sky max — ESO",     f"{eso_sky_pix:.0f} e⁻/pix", delta=f"{_r.sky_max_e_pix - eso_sky_pix:+.0f} (CTE)")
             dc4.metric("Target max — ESO",  f"{eso_tgt_pix:.0f} e⁻/pix", delta=f"{_r.source_max_e_pix - eso_tgt_pix:+.0f} (CTE)")
 
-            # Gráfica de barras comparativa
-            bar_data = [
-                ("S/N",         _r.snr,          eso_snr    if eso_snr    > 0 else None),
-                ("Señal [e⁻]",  _r.signal_e,     eso_signal if eso_signal > 0 else None),
-                ("Cielo [e⁻]",  _r.sky_signal_e, eso_sky    if eso_sky    > 0 else None),
-            ]
-            bar_labels = [d[0] for d in bar_data if d[2] is not None]
-            bar_ours   = [d[1] for d in bar_data if d[2] is not None]
-            bar_eso_v  = [d[2] for d in bar_data if d[2] is not None]
-
-            if bar_labels:
-                fig_cmp = go.Figure()
-                fig_cmp.add_trace(go.Bar(
-                    name="Nuestra CTE", x=bar_labels, y=bar_ours,
-                    marker_color=T["plot_line"],
-                    text=[f"{v:,.1f}" for v in bar_ours], textposition="outside",
-                ))
-                fig_cmp.add_trace(go.Bar(
-                    name="ETC de ESO", x=bar_labels, y=bar_eso_v,
-                    marker_color=T["plot_point"],
-                    text=[f"{v:,.1f}" for v in bar_eso_v], textposition="outside",
-                ))
-                fig_cmp.update_layout(
-                    template="plotly_dark" if theme == "dark" else "plotly_white",
-                    barmode="group", height=360,
-                    margin=dict(l=50, r=20, t=55, b=40),
-                    paper_bgcolor=T["plot_paper"], plot_bgcolor=T["plot_bg"],
-                    font=dict(family="Inter, sans-serif", size=12, color=T["plot_axis"]),
-                    title=dict(text="Nuestra CTE vs ETC de ESO",
-                               font=dict(size=14, color=T["plot_axis"]),
-                               x=0.01, xanchor="left", y=0.97),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.04,
-                                xanchor="left", x=0.0,
-                                bgcolor="rgba(0,0,0,0)", font=dict(size=12)),
-                    yaxis=dict(showgrid=True, gridcolor=T["plot_grid"], zeroline=False),
-                )
-                st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
-                st.plotly_chart(fig_cmp, use_container_width=True, config={"displayModeBar": False})
-                st.markdown("</div>", unsafe_allow_html=True)
-
         except Exception as exc:
             st.error(f"Error al calcular: {exc}")
 
