@@ -876,7 +876,7 @@ with tab_curves:
             zeroline=False, linecolor=T["plot_grid"],
             tickfont=dict(size=11), title_font=dict(size=13),
         )
-        st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
+        
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -936,7 +936,7 @@ with tab_curves:
             zeroline=False, linecolor=T["plot_grid"],
             tickfont=dict(size=11), title_font=dict(size=13),
         )
-        st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
+        
         st.plotly_chart(fig_m, use_container_width=True, config={"displayModeBar": False})
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1000,7 +1000,7 @@ with tab_budget:
 
         col_pie, col_tbl = st.columns([1.3, 1])
         with col_pie:
-            st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
+            
             st.plotly_chart(fig_pie, use_container_width=True,
                             config={"displayModeBar": False})
             st.markdown("</div>", unsafe_allow_html=True)
