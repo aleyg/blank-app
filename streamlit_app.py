@@ -436,15 +436,12 @@ small, .stCaption, [data-testid="stCaptionContainer"] {{
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🔭 Configuración")
-    st.caption("VLT 8 m · Modelo calibrado con ESO FORS2 / HAWK-I")
-
     # ── Telescopio (fijo) ────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### Telescopio")
     st.markdown(f"""
-<div class="eso-info-badge">VLT — 8 m (fijo)</div>
+<div class="eso-info-badge">Diámetro 8 m - Óptico - Filtro g  </div>
 <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.3rem;">
-  Diámetro primario fijo para comparación directa con el ETC oficial de ESO.
 </div>
 """, unsafe_allow_html=True)
 
@@ -1215,7 +1212,7 @@ with tab_validation:
             st.markdown(f"""
 <div class="html-card">
   <div class="section-kicker">
-    Filtro r · VLT 8 m · {_mag_in} AB · {_texp_in:.0f} s · airmass {_air_in} · seeing {_see_in:.2f}" · Ω = {eso_omega:.2f} arcsec²
+    Filtro {filter_name} · VLT 8 m · {_mag_in} AB · {_texp_in:.0f} s · airmass {_air_in} · seeing {_see_in:.2f}" · Ω = {eso_omega:.2f} arcsec²
   </div>
   <h3 style="margin-top:0;">Tabla de comparación</h3>
   <div class="table-clean">
