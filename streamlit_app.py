@@ -1248,32 +1248,7 @@ with tab_validation:
         except Exception as exc:
             st.error(f"Error al calcular: {exc}")
 
-    # ── Explicación de discrepancias ─────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("""
-<div class="html-card">
-  <div class="section-kicker">Origen de las diferencias</div>
-  <h3 style="margin-top:0;">¿Por qué no coinciden exactamente?</h3>
-  <div class="table-clean">
-    <table>
-      <thead>
-        <tr><th>Factor</th><th>ETC de ESO</th><th>Nuestra CTE</th><th>Impacto típico</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Espectro de cielo</td><td>Noll et al. 2012 (líneas OH, O₂, Na…)</td><td>Brillo AB plano por banda</td><td>10–40 %</td></tr>
-        <tr><td>SED del objeto</td><td>Plantilla estelar (MARCS, Pickles…)</td><td>Fuente plana en F_ν (AB)</td><td>5–15 %</td></tr>
-        <tr><td>Throughput</td><td>Curvas reales T(λ) · QE(λ)</td><td>Valor constante por banda</td><td>5–10 %</td></tr>
-        <tr><td>Extinción</td><td>k(λ) espectral completo</td><td>k_λ promedio por banda</td><td>2–8 %</td></tr>
-        <tr><td>PSF / EE</td><td>Perfil Moffat calibrado con datos VLT</td><td>Moffat β = 2.5 analítico</td><td>3–10 %</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="note-list" style="margin-top:0.75rem;">
-    Una diferencia de ≤ 15 % en S/N es aceptable para un modelo analítico simplificado.
-    La discrepancia dominante suele ser el espectro de cielo de Paranal.
-  </div>
-</div>
-""", unsafe_allow_html=True)
+
 
 with tab_model:
     col_m1, col_m2 = st.columns([1.1, 1])
