@@ -1056,159 +1056,161 @@ with tab_validation:
     <strong>Paso 1 —</strong> Abre el
     <a href="https://etc.eso.org/observing/etc/fors" target="_blank" style="color:var(--accent);">
     ETC de ESO (FORS2)</a>, configura tu observación y ejecuta el cálculo.<br><br>
-    <strong>Paso 2 —</strong> En la página de resultados del ETC, descarga o copia el
-    <strong>JSON de resultados</strong> que entrega ESO (contiene campos como
-    <code>Starget</code>, <code>Ssky</code>, <code>SN</code>, <code>Npix</code>, <code>EE</code>…).<br><br>
-    <strong>Paso 3 —</strong> Pégalo en el campo de abajo y haz clic en
-    <strong>Comparar</strong>. La app extrae automáticamente los valores ESO y los
-    compara con nuestra CTE usando los mismos parámetros de observación.
+    <strong>Paso 2 —</strong> Pega el <strong>JSON de input</strong> que usaste en el ETC
+    (para que la app lea automáticamente magnitud, tiempo, airmass y seeing).<br><br>
+    <strong>Paso 3 —</strong> Copia los valores del <strong>cuadro de resultados</strong>
+    que muestra el ETC (Starget, Ssky, S/N, Npix, EE…) en los campos numéricos de abajo.<br><br>
+    <strong>Paso 4 —</strong> Haz clic en <strong>🔬 Comparar</strong>.
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-    # ── Área de pegado del JSON de resultados ESO ────────────────────────────
-    resp_json_str = st.text_area(
-        "JSON de resultados del ETC de ESO",
-        height=240,
-        placeholder=(
-            '{\n'
-            '  "Starget": 409000,\n'
-            '  "Ssky":    740000,\n'
-            '  "SN":      381,\n'
-            '  "Npix":    38,\n'
-            '  "EE":      0.991,\n'
-            '  "RON":     3.15,\n'
-            '  "dark":    0.000583,\n'
-            '  "dit":     60,\n'
-            '  "mag":     20.0,\n'
-            '  "airmass": 1.0,\n'
-            '  "seeing":  0.8\n'
-            '}'
-        ),
-        help=(
-            "Pega aquí el JSON que descargaste del ETC de ESO. "
-            "Los campos reconocidos son: SN (o snr), Starget (o target_signal), "
-            "Ssky (o sky_signal), Npix (o npix), EE (o ee), RON, dark, dit, mag, airmass, seeing."
-        ),
+
+
+    st.markdown("---")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SECCIÓN A — JSON de INPUT (para leer parámetros automáticamente)
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown("### 1 · JSON de input del ETC de ESO")
+    st.caption("Pega el JSON de configuración que usaste en el ETC. La app leerá magnitud, tiempo, airmass y seeing automáticamente.")
+
+    default_input_json = """{
+  "target": {
+    "morphology": {"morphologytype": "point"},
+    "sed": {
+      "sedtype": "spectrum",
+      "spectrum": {"spectrumtype": "template", "params": {"catalog": "MARCS", "id": "5750:4.5"}},
+      "extinctionav": 0
+    },
+    "brightness": {"brightnesstype": "mag", "magband": "V", "mag": 20, "magsys": "AB"}
+  },
+  "sky": {"airmass": 1, "fli": 0, "waterVapour": 30, "moonDistance": 90},
+  "seeing": {"turbulence_category": 50, "aperturepix": 0},
+  "instrument": {
+    "DET.READ.CLKIND": "200kHz,2x2,low",
+    "INS.FILT1.NAME": "GG435+81",
+    "SEQ.CCD": "R",
+    "INS.COLL.NAID": "COLL_HR+7",
+    "ins_configuration": "img_nopol"
+  },
+  "timesnr": {"DET.WIN1.UIT1": 60, "snr": 18},
+  "output": {"psf": {"psf": false}},
+  "instrumentName": "fors"
+}"""
+
+    input_json_str = st.text_area(
+        "JSON de input",
+        value=default_input_json,
+        height=220,
+        label_visibility="collapsed",
     )
 
-    comparar = st.button("🔬 Comparar con nuestra CTE", use_container_width=False)
+    # Parsear input JSON y extraer parámetros
+    _mag_in, _texp_in, _air_in, _see_in = object_mag, float(exp_time or 60.0), airmass, seeing
+    _input_ok = False
+    try:
+        _jin = json.loads(input_json_str)
+        _mag_in  = float(_jin.get("target", {}).get("brightness", {}).get("mag", object_mag))
+        _texp_in = float(_jin.get("timesnr", {}).get("DET.WIN1.UIT1", exp_time or 60.0))
+        _air_in  = float(_jin.get("sky", {}).get("airmass", airmass))
+        _turb    = int(_jin.get("seeing", {}).get("turbulence_category", 50))
+        _seeing_map = {20: 0.5, 30: 0.65, 50: 0.8, 70: 1.0, 85: 1.4}
+        _see_in  = _seeing_map.get(_turb, 0.8)
+        _input_ok = True
+        st.success(
+            f"✅ JSON leído — mag = **{_mag_in}** AB · "
+            f"t = **{_texp_in:.0f} s** · airmass = **{_air_in}** · "
+            f"seeing ≈ **{_see_in}\"** (cat. {_turb})"
+        )
+    except Exception as _e:
+        st.warning(f"JSON de input no válido ({_e}). Se usarán los valores del sidebar.")
 
-    # ── Procesamiento ────────────────────────────────────────────────────────
-    if comparar and resp_json_str.strip():
+    st.markdown("---")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SECCIÓN B — OUTPUT del ETC de ESO (campos manuales)
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown("### 2 · Resultados del ETC de ESO")
+    st.caption(
+        "Copia los valores que muestra el ETC de ESO en su cuadro de resultados. "
+        "Deja en 0 los campos que no aparezcan."
+    )
+
+    # Fila 1: señales principales
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        eso_snr    = st.number_input("S/N",             min_value=0.0, value=308.0,   step=1.0,    format="%.1f")
+    with col2:
+        eso_signal = st.number_input("Starget [e⁻]",    min_value=0.0, value=123000.0, step=100.0,  format="%.0f")
+    with col3:
+        eso_sky    = st.number_input("Ssky [e⁻]",       min_value=0.0, value=36000.0,  step=100.0,  format="%.0f")
+    with col4:
+        eso_npix   = st.number_input("Npix",            min_value=0.0, value=38.0,    step=1.0,    format="%.0f")
+    with col5:
+        eso_ee     = st.number_input("EE (fracción)",   min_value=0.0, max_value=1.0, value=0.987, step=0.001,  format="%.3f")
+
+    # Fila 2: detector
+    col6, col7, col8, col9, col10 = st.columns(5)
+    with col6:
+        eso_ron    = st.number_input("RON [e⁻/pix]",   min_value=0.0, value=3.15,    step=0.01,   format="%.2f")
+    with col7:
+        eso_dark   = st.number_input("Dark [e⁻/s/pix]",min_value=0.0, value=0.000583,step=0.0001, format="%.6f")
+    with col8:
+        eso_omega  = st.number_input("Apertura Ω [arcsec²]", min_value=0.0, value=2.41, step=0.01, format="%.2f")
+    with col9:
+        eso_sky_pix= st.number_input("Sky max [e⁻/pix]",min_value=0.0,value=946.0,  step=1.0,    format="%.0f")
+    with col10:
+        eso_tgt_pix= st.number_input("Target max [e⁻/pix]",min_value=0.0,value=10500.0,step=100.0,format="%.0f")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    comparar = st.button("🔬 Comparar con nuestra CTE", type="primary")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PROCESAMIENTO Y COMPARACIÓN
+    # ══════════════════════════════════════════════════════════════════════════
+    if comparar:
         try:
-            eso_data = json.loads(resp_json_str)
-        except Exception as e:
-            st.error(f"⚠️ JSON inválido: {e}")
-            eso_data = None
+            # Recalcular CTE con los parámetros extraídos del input JSON
+            _ap_r = math.sqrt(eso_omega / math.pi) if eso_omega > 0 else default_aperture_radius(_see_in)
+            _cond = ObservingConditions(
+                seeing_fwhm_arcsec=_see_in,
+                aperture_radius_arcsec=_ap_r,
+                total_throughput=throughput,
+                n_reads=int(n_reads),
+                airmass=_air_in,
+            )
+            _tel = TelescopeParams(diameter_m=TELESCOPE_DIAMETER_M, obstruction_fraction=obstruction)
+            _r   = compute_snr(float(_mag_in), float(_texp_in), _tel, filt, det, _cond, src)
 
-        if eso_data is not None:
+            # Helpers
+            def _pct(ours, eso_val):
+                if eso_val and eso_val != 0:
+                    return 100.0 * (ours - eso_val) / eso_val
+                return None
 
-            # Función robusta de búsqueda en el JSON
-            def _get(d, *keys, default=None):
-                """Busca el primer key que exista en el dict (insensible a mayúsculas)."""
-                d_lower = {k.lower(): v for k, v in d.items()} if isinstance(d, dict) else {}
-                for k in keys:
-                    # Búsqueda directa
-                    if k in d:
-                        v = d[k]
-                        if isinstance(v, list): v = v[0] if v else None
-                        if isinstance(v, (int, float)): return float(v)
-                    # Búsqueda en minúsculas
-                    kl = k.lower()
-                    if kl in d_lower:
-                        v = d_lower[kl]
-                        if isinstance(v, list): v = v[0] if v else None
-                        if isinstance(v, (int, float)): return float(v)
-                    # Búsqueda recursiva un nivel
-                    for val in d.values() if isinstance(d, dict) else []:
-                        if isinstance(val, dict):
-                            sub = {sk.lower(): sv for sk, sv in val.items()}
-                            if kl in sub:
-                                sv = sub[kl]
-                                if isinstance(sv, list): sv = sv[0] if sv else None
-                                if isinstance(sv, (int, float)): return float(sv)
-                return default
+            def _fmt_pct(p):
+                if p is None: return "—"
+                return f"{'+'if p>=0 else ''}{p:.1f} %"
 
-            # Extraer valores del JSON de ESO
-            eso_snr    = _get(eso_data, "SN", "snr", "SNR", "signal_to_noise")
-            eso_signal = _get(eso_data, "Starget", "target_signal", "signal", "S_target")
-            eso_sky    = _get(eso_data, "Ssky", "sky_signal", "S_sky", "sky")
-            eso_npix   = _get(eso_data, "Npix", "npix", "n_pix", "Npixels")
-            eso_ee     = _get(eso_data, "EE", "ee", "encircled_energy", "enclosed_energy")
-            eso_ron    = _get(eso_data, "RON", "ron", "read_noise", "readnoise")
-            eso_dark   = _get(eso_data, "dark", "dark_current", "Dark")
-            eso_dit    = _get(eso_data, "dit", "DET.WIN1.UIT1", "texp", "exposure_time", default=float(exp_time or 60.0))
-            eso_mag    = _get(eso_data, "mag", "magnitude", "object_mag", default=object_mag)
-            eso_air    = _get(eso_data, "airmass", "airmass_value", default=airmass)
-            eso_see    = _get(eso_data, "seeing", "fwhm", "seeing_fwhm", default=seeing)
+            def _td_color(p):
+                if p is None: return ""
+                if abs(p) < 10:  return "color:#86efac"
+                if abs(p) < 25:  return "color:#fcd34d"
+                return "color:#f9a8d4"
 
-            # Mostrar qué se extrajo
-            st.markdown("### Valores extraídos del JSON de ESO")
-            c1, c2, c3, c4 = st.columns(4)
-            if eso_snr    is not None: c1.metric("S/N (ESO)",          f"{eso_snr:.1f}")
-            if eso_signal is not None: c2.metric("Señal objeto (ESO)",  f"{eso_signal:,.0f} e⁻")
-            if eso_sky    is not None: c3.metric("Señal cielo (ESO)",   f"{eso_sky:,.0f} e⁻")
-            if eso_npix   is not None: c4.metric("Npix (ESO)",          f"{eso_npix:.0f}")
+            # Tabla de comparación
+            comparisons = [
+                ("S/N",                  f"{_r.snr:.1f}",                    f"{eso_snr:.1f}",     _pct(_r.snr,             eso_snr   if eso_snr   > 0 else None)),
+                ("Señal objeto [e⁻]",    f"{_r.signal_e:,.0f}",              f"{eso_signal:,.0f}", _pct(_r.signal_e,        eso_signal if eso_signal > 0 else None)),
+                ("Señal cielo [e⁻]",     f"{_r.sky_signal_e:,.0f}",          f"{eso_sky:,.0f}",    _pct(_r.sky_signal_e,    eso_sky    if eso_sky    > 0 else None)),
+                ("Píxeles en apertura",  f"{_r.n_pixels:.1f}",               f"{eso_npix:.0f}",    _pct(_r.n_pixels,        eso_npix   if eso_npix   > 0 else None)),
+                ("Energía encerrada (EE)",f"{_r.enclosed_energy:.3f}",       f"{eso_ee:.3f}",      _pct(_r.enclosed_energy, eso_ee     if eso_ee     > 0 else None)),
+            ]
 
-            c5, c6, c7, c8 = st.columns(4)
-            if eso_ee   is not None: c5.metric("EE (ESO)",       f"{eso_ee*100:.1f} %")
-            if eso_ron  is not None: c6.metric("RON (ESO)",      f"{eso_ron:.2f} e⁻/pix")
-            if eso_dark is not None: c7.metric("Dark (ESO)",     f"{eso_dark:.6f} e⁻/s/pix")
-            if eso_dit  is not None: c8.metric("Tiempo exp. (ESO)", format_time(eso_dit))
-
-            # ── Recalcular nuestra CTE con los parámetros del JSON ───────────
-            st.markdown("### Nuestra CTE con los parámetros ESO")
-            try:
-                _ap_r = default_aperture_radius(float(eso_see))
-                _cond = ObservingConditions(
-                    seeing_fwhm_arcsec=float(eso_see),
-                    aperture_radius_arcsec=_ap_r,
-                    total_throughput=throughput,
-                    n_reads=int(n_reads),
-                    airmass=float(eso_air),
-                )
-                _tel = TelescopeParams(
-                    diameter_m=TELESCOPE_DIAMETER_M,
-                    obstruction_fraction=obstruction,
-                )
-                _r = compute_snr(
-                    float(eso_mag), float(eso_dit),
-                    _tel, filt, det, _cond, src,
-                )
-
-                # ── Tabla de comparación ─────────────────────────────────────
-                def _pct(ours, theirs):
-                    if theirs is not None and theirs != 0:
-                        return 100.0 * (ours - theirs) / theirs
-                    return None
-
-                def _fmt(v, decimals=2):
-                    if v is None: return "—"
-                    return f"{v:,.{decimals}f}"
-
-                def _fmt_pct(p):
-                    if p is None: return "—"
-                    sign = "+" if p >= 0 else ""
-                    return f"{sign}{p:.1f} %"
-
-                def _td_color(p):
-                    if p is None: return ""
-                    if abs(p) < 10:  return "color:#86efac"
-                    if abs(p) < 25:  return "color:#fcd34d"
-                    return "color:#f9a8d4"
-
-                comparisons = [
-                    ("S/N",               f"{_r.snr:.2f}",                   _fmt(eso_snr, 1),    _pct(_r.snr,             eso_snr)),
-                    ("Señal objeto [e⁻]", f"{_r.signal_e:,.0f}",             _fmt(eso_signal, 0), _pct(_r.signal_e,        eso_signal)),
-                    ("Señal cielo [e⁻]",  f"{_r.sky_signal_e:,.0f}",         _fmt(eso_sky, 0),    _pct(_r.sky_signal_e,    eso_sky)),
-                    ("Píxeles apertura",  f"{_r.n_pixels:.1f}",              _fmt(eso_npix, 1),   _pct(_r.n_pixels,        eso_npix)),
-                    ("Energía encerrada", f"{_r.enclosed_energy*100:.1f} %", _fmt(eso_ee, 3) if eso_ee is None else f"{eso_ee*100:.1f} %", _pct(_r.enclosed_energy, eso_ee)),
-                ]
-
-                rows_html = ""
-                for label, ours_str, eso_str, p in comparisons:
-                    rows_html += f"""
+            rows_html = ""
+            for label, ours_str, eso_str, p in comparisons:
+                rows_html += f"""
       <tr>
         <td>{label}</td>
         <td style="font-family:monospace;">{ours_str}</td>
@@ -1216,10 +1218,10 @@ with tab_validation:
         <td style="font-family:monospace;font-weight:600;{_td_color(p)}">{_fmt_pct(p)}</td>
       </tr>"""
 
-                st.markdown(f"""
+            st.markdown(f"""
 <div class="html-card">
   <div class="section-kicker">
-    Filtro r · VLT 8.2 m · {eso_mag} AB mag · {format_time(eso_dit)} · airmass {eso_air:.1f} · seeing {eso_see:.2f}"
+    Filtro r · VLT 8.2 m · {_mag_in} AB · {_texp_in:.0f} s · airmass {_air_in} · seeing {_see_in:.2f}" · Ω = {eso_omega:.2f} arcsec²
   </div>
   <h3 style="margin-top:0;">Tabla de comparación</h3>
   <div class="table-clean">
@@ -1236,78 +1238,66 @@ with tab_validation:
       </tbody>
     </table>
   </div>
-  <div class="note-list" style="margin-top:0.75rem;">
-    <span style="color:#86efac;">■</span> &lt; 10 % &nbsp;
-    <span style="color:#fcd34d;">■</span> 10–25 % &nbsp;
+  <div class="note-list" style="margin-top:0.65rem;">
+    <span style="color:#86efac;">■</span> &lt; 10 % &nbsp;&nbsp;
+    <span style="color:#fcd34d;">■</span> 10–25 % &nbsp;&nbsp;
     <span style="color:#f9a8d4;">■</span> &gt; 25 %
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-                # ── Gráfica de barras comparativa ────────────────────────────
-                bar_labels, bar_ours, bar_eso = [], [], []
-                pairs = [
-                    ("S/N",          _r.snr,          eso_snr),
-                    ("Señal [e⁻]",   _r.signal_e,     eso_signal),
-                    ("Cielo [e⁻]",   _r.sky_signal_e, eso_sky),
-                ]
-                for lbl, ours_v, eso_v in pairs:
-                    if eso_v is not None:
-                        bar_labels.append(lbl)
-                        bar_ours.append(ours_v)
-                        bar_eso.append(eso_v)
+            # Métricas detalladas del detector (comparación directa)
+            st.markdown("#### Parámetros del detector")
+            dc1, dc2, dc3, dc4 = st.columns(4)
+            dc1.metric("RON — ESO",        f"{eso_ron:.2f} e⁻/pix",      delta=f"{det.read_noise_e - eso_ron:+.2f} (CTE)")
+            dc2.metric("Dark — ESO",        f"{eso_dark:.6f} e⁻/s/pix",  delta=f"{det.dark_current_e_s - eso_dark:+.6f} (CTE)")
+            dc3.metric("Sky max — ESO",     f"{eso_sky_pix:.0f} e⁻/pix", delta=f"{_r.sky_max_e_pix - eso_sky_pix:+.0f} (CTE)")
+            dc4.metric("Target max — ESO",  f"{eso_tgt_pix:.0f} e⁻/pix", delta=f"{_r.source_max_e_pix - eso_tgt_pix:+.0f} (CTE)")
 
-                if bar_labels:
-                    fig_cmp = go.Figure()
-                    fig_cmp.add_trace(go.Bar(
-                        name="Nuestra CTE",
-                        x=bar_labels, y=bar_ours,
-                        marker_color=T["plot_line"],
-                        text=[f"{v:,.1f}" for v in bar_ours],
-                        textposition="outside",
-                    ))
-                    fig_cmp.add_trace(go.Bar(
-                        name="ETC de ESO",
-                        x=bar_labels, y=bar_eso,
-                        marker_color=T["plot_point"],
-                        text=[f"{v:,.1f}" for v in bar_eso],
-                        textposition="outside",
-                    ))
-                    fig_cmp.update_layout(
-                        template="plotly_dark" if theme == "dark" else "plotly_white",
-                        barmode="group",
-                        height=380,
-                        margin=dict(l=50, r=20, t=55, b=40),
-                        paper_bgcolor=T["plot_paper"],
-                        plot_bgcolor=T["plot_bg"],
-                        font=dict(family="Inter, sans-serif", size=12, color=T["plot_axis"]),
-                        title=dict(
-                            text="Nuestra CTE vs ETC de ESO",
-                            font=dict(size=14, color=T["plot_axis"]),
-                            x=0.01, xanchor="left", y=0.97,
-                        ),
-                        legend=dict(
-                            orientation="h", yanchor="bottom", y=1.04,
-                            xanchor="left", x=0.0,
-                            bgcolor="rgba(0,0,0,0)", font=dict(size=12),
-                        ),
-                        yaxis=dict(showgrid=True, gridcolor=T["plot_grid"], zeroline=False),
-                    )
-                    st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
-                    st.plotly_chart(fig_cmp, use_container_width=True,
-                                    config={"displayModeBar": False})
-                    st.markdown("</div>", unsafe_allow_html=True)
+            # Gráfica de barras comparativa
+            bar_data = [
+                ("S/N",         _r.snr,          eso_snr    if eso_snr    > 0 else None),
+                ("Señal [e⁻]",  _r.signal_e,     eso_signal if eso_signal > 0 else None),
+                ("Cielo [e⁻]",  _r.sky_signal_e, eso_sky    if eso_sky    > 0 else None),
+            ]
+            bar_labels = [d[0] for d in bar_data if d[2] is not None]
+            bar_ours   = [d[1] for d in bar_data if d[2] is not None]
+            bar_eso_v  = [d[2] for d in bar_data if d[2] is not None]
 
-            except Exception as exc:
-                st.error(f"Error al recalcular la CTE: {exc}")
+            if bar_labels:
+                fig_cmp = go.Figure()
+                fig_cmp.add_trace(go.Bar(
+                    name="Nuestra CTE", x=bar_labels, y=bar_ours,
+                    marker_color=T["plot_line"],
+                    text=[f"{v:,.1f}" for v in bar_ours], textposition="outside",
+                ))
+                fig_cmp.add_trace(go.Bar(
+                    name="ETC de ESO", x=bar_labels, y=bar_eso_v,
+                    marker_color=T["plot_point"],
+                    text=[f"{v:,.1f}" for v in bar_eso_v], textposition="outside",
+                ))
+                fig_cmp.update_layout(
+                    template="plotly_dark" if theme == "dark" else "plotly_white",
+                    barmode="group", height=360,
+                    margin=dict(l=50, r=20, t=55, b=40),
+                    paper_bgcolor=T["plot_paper"], plot_bgcolor=T["plot_bg"],
+                    font=dict(family="Inter, sans-serif", size=12, color=T["plot_axis"]),
+                    title=dict(text="Nuestra CTE vs ETC de ESO",
+                               font=dict(size=14, color=T["plot_axis"]),
+                               x=0.01, xanchor="left", y=0.97),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.04,
+                                xanchor="left", x=0.0,
+                                bgcolor="rgba(0,0,0,0)", font=dict(size=12)),
+                    yaxis=dict(showgrid=True, gridcolor=T["plot_grid"], zeroline=False),
+                )
+                st.markdown('<div class="plot-shell">', unsafe_allow_html=True)
+                st.plotly_chart(fig_cmp, use_container_width=True, config={"displayModeBar": False})
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    elif comparar:
-        st.warning("El campo de JSON está vacío. Pega el JSON de resultados del ETC de ESO.")
+        except Exception as exc:
+            st.error(f"Error al calcular: {exc}")
 
-    if not comparar:
-        st.info("Pega el JSON de resultados del ETC de ESO en el campo de arriba y haz clic en **🔬 Comparar**.")
-
-    # ── Explicación de discrepancias (siempre visible) ───────────────────────
+    # ── Explicación de discrepancias ─────────────────────────────────────────
     st.markdown("---")
     st.markdown("""
 <div class="html-card">
