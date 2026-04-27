@@ -9,8 +9,6 @@ Este módulo se encarga exclusivamente de:
   - Llamar funciones del backend
   - Mostrar resultados, gráficas y diagnósticos
 
-Toda la física vive en backend.py.
-Telescopio fijo: VLT 8 m — para comparación directa con el ETC de ESO.
 """
 
 import json
@@ -547,11 +545,11 @@ top_left, _, _ = st.columns([10, 0.4, 1.2])
 with top_left:
     st.markdown(f"""
 <div class="topbar">
-  <div class="kicker">Herramienta académica de observación · VLT 8 m</div>
+  <div class="kicker">Herramienta académica de observación </div>
   <div class="topbar-title">Calculadora de Tiempo de Exposición</div>
                 <div class="meta-line">
-<strong>Modo Óptico</strong> · Filtro <strong>r</strong> ·
-Telescopio <strong> 8 m</strong> · Objeto <strong>{object_mag:.1f} AB mag</strong> ·
+Telescopio <strong> 8 m</strong> · <strong>Modo Óptico</strong> · Filtro <strong>{filter_name}</strong> ·
+ Objeto <strong>{object_mag:.1f} AB mag</strong> ·
 Airmass <strong>{airmass:.2f}</strong>
 </div>
 </div>
@@ -1247,8 +1245,6 @@ with tab_validation:
 
         except Exception as exc:
             st.error(f"Error al calcular: {exc}")
-
-
 
 with tab_model:
     col_m1, col_m2 = st.columns([1.1, 1])
