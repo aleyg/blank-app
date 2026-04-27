@@ -174,7 +174,7 @@ with st.sidebar:
     st.markdown(f"""
 <div style="background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;
      padding:0.6rem 0.8rem;font-size:0.85rem;color:var(--accent);margin-bottom:0.5rem;">
-   D = 8 m · Filtro <strong>g</strong> · T = 0.80 · s_pix = 0.20"/pix
+   D = 8 m · Óptico · Filtro <strong>g</strong>
 </div>
 """, unsafe_allow_html=True)
 
