@@ -453,7 +453,7 @@ with st.sidebar:
 
     throughput = st.slider(
         "Transmisión total del sistema",
-        min_value=0.1, max_value=1.0, value=0.80, step=0.01,
+        min_value=0.1, max_value=1.0, value=0.36, step=0.01,
         help="Transmisión combinada de óptica, espejos y filtro.",
     )
 
